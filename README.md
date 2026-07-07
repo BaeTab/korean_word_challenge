@@ -81,6 +81,17 @@ npm run deploy         # = vite build && firebase deploy --only hosting
 firebase deploy --only firestore
 ```
 
+### 🔄 자동 배포 (CI/CD · GitHub Actions)
+
+`main` 브랜치에 푸시하면 `.github/workflows/deploy.yml`가 **빌드 후 Firebase Hosting(live)에 자동 배포**한다.
+
+**최초 1회 설정 — GitHub 시크릿 등록:**
+1. Firebase Console → ⚙️ 프로젝트 설정 → **서비스 계정** → **새 비공개 키 생성** → JSON 다운로드
+2. GitHub 저장소 → Settings → Secrets and variables → **Actions** → New repository secret
+   - 이름: `FIREBASE_SERVICE_ACCOUNT`
+   - 값: 다운로드한 JSON 전체 붙여넣기
+3. 이후 `git push` 하면 자동 빌드·배포 (시크릿 미설정 시 배포 단계는 자동 스킵)
+
 > ⚠️ **콘솔 필수 설정 2가지**
 > 1. **Authentication → 로그인 방법 → 익명(Anonymous) 사용 설정** (랭킹 등록에 필요)
 > 2. 랭킹 정렬용 **복합 인덱스**가 필요하다. `firebase deploy --only firestore:indexes`로 배포하거나,
