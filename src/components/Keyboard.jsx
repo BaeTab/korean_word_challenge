@@ -34,17 +34,27 @@ export default function Keyboard({ keyStates, onKey, onDelete, onEnter, disabled
   // 물리 키보드 지원
   useEffect(() => {
     const handler = (e) => {
-      if (e.repeat) return
+      // 입력창(닉네임 등)에 포커스돼 있으면 기본 동작을 존중 (게임 키 가로채지 않음)
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      // 조합 입력 중이거나 수정키가 눌린 경우도 브라우저 기본 동작을 존중
+      if (e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === 'Enter') {
-        if (!disabled) onEnter()
+        e.preventDefault()
+        if (!e.repeat && !disabled) onEnter()
         return
       }
       if (e.key === 'Backspace') {
+        e.preventDefault() // 브라우저 '뒤로가기' 방지
         if (!disabled) onDelete()
         return
       }
+      if (e.repeat) return
       const jamo = CODE_TO_JAMO[e.code]
-      if (jamo && !disabled) onKey(jamo)
+      if (jamo && !disabled) {
+        e.preventDefault()
+        onKey(jamo)
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
