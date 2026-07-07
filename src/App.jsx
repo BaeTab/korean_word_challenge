@@ -363,11 +363,12 @@ export default function App() {
             </button>
 
             {isDaily ? (
-              <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goIntro}>↩ 메인으로</button>
+              <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goIntro}>🏠 홈으로</button>
             ) : (
               <>
                 <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRetry}>🔄 같은 모드 다시</button>
                 <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRestart}>↩ 처음부터</button>
+                <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goIntro}>🏠 홈으로</button>
               </>
             )}
           </div>
