@@ -1,0 +1,128 @@
+/* =============================================================================
+   전역 스타일 · 귀여운 터미널 테마
+   - 폰트: JetBrains Mono(모노/Nerd Font 대체) + Gothic A1(한글 가독)
+   - 팔레트: 딥 터미널 다크 + 네온 그린/앰버/핑크 파스텔 네온
+   ============================================================================= */
+
+:root {
+  /* 배경 */
+  --bg: #0d1117;
+  --bg-soft: #11161d;
+  --panel: #161b22;
+  --panel-2: #1c2330;
+  --border: #263041;
+  --border-soft: #21262d;
+
+  /* 텍스트 */
+  --text: #d7e2ee;
+  --text-dim: #8b98a9;
+
+  /* 네온 포인트 */
+  --green: #3ddc97;
+  --green-soft: #2fb883;
+  --amber: #ffb454;
+  --pink: #ff7eb6;
+  --blue: #6fb1ff;
+
+  /* 판정색 */
+  --correct: #3ddc97;
+  --correct-ink: #06231a;
+  --present: #ffcf5c;
+  --present-ink: #2e2205;
+  --absent: #323b49;
+  --absent-ink: #79879a;
+
+  /* 형태 */
+  --radius: 16px;
+  --radius-sm: 11px;
+  --glow-green: 0 0 0 rgba(61, 220, 151, 0);
+  --font-mono: 'JetBrains Mono', 'Sarasa Mono K', 'D2Coding', ui-monospace, 'Courier New', monospace;
+  --font-kr: 'Gothic A1', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+/* 모바일 브라우저 주소창 대응: 동적 뷰포트 높이 */
+@supports (height: 100dvh) {
+  html, body, #root { min-height: 100dvh; }
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(61, 220, 151, 0.09), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(255, 126, 182, 0.08), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--font-kr);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+/* 은은한 스캔라인(터미널 감성) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.015) 0px,
+    rgba(255, 255, 255, 0.015) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  z-index: 9999;
+  mix-blend-mode: overlay;
+}
+
+h1, h2, h3 {
+  margin: 0;
+  font-family: var(--font-mono);
+}
+
+button {
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border: none;
+  color: inherit;
+  background: none;
+  touch-action: manipulation; /* 모바일 300ms 탭 딜레이 제거 */
+  user-select: none;
+}
+
+input {
+  font-family: var(--font-kr);
+  font-size: 16px; /* iOS 자동 확대(zoom) 방지 */
+}
+
+::selection {
+  background: rgba(61, 220, 151, 0.3);
+  color: #fff;
+}
+
+/* 스크롤바 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--green-soft);
+}

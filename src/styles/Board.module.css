@@ -1,0 +1,137 @@
+/* ===== 게임판 ===== */
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: calc(var(--slots) * 62px);
+  perspective: 800px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(var(--slots), 1fr);
+  gap: 8px;
+}
+
+/* 타일 */
+.tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 2px solid var(--border-soft);
+  transform-style: preserve-3d;
+
+  /* 판정색은 커스텀 프로퍼티로 주입 → flip 키프레임이 사용 */
+  --tile-bg: var(--panel);
+  --tile-fg: var(--text);
+  --tile-bd: var(--border-soft);
+}
+
+.glyph {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: clamp(1.4rem, 6vw, 2rem);
+  color: inherit;
+  user-select: none;
+}
+
+/* 입력된(미제출) 칸 */
+.filled {
+  border-color: var(--green);
+  background: var(--panel-2);
+  color: var(--text);
+  box-shadow: 0 0 0 2px rgba(61, 220, 151, 0.12) inset;
+}
+.pop { animation: pop 0.14s var(--ease-bounce); }
+@keyframes pop {
+  0% { transform: scale(0.85); }
+  100% { transform: scale(1); }
+}
+
+/* 판정색 (커스텀 프로퍼티만 세팅 → flip이 실제 반영) */
+.correct { --tile-bg: var(--correct); --tile-fg: var(--correct-ink); --tile-bd: var(--correct); }
+.present { --tile-bg: var(--present); --tile-fg: var(--present-ink); --tile-bd: var(--present); }
+.absent  { --tile-bg: var(--absent);  --tile-fg: var(--absent-ink);  --tile-bd: var(--absent); }
+
+/* 제출된 칸: 순차 뒤집기 공개 (칸 인덱스 --i 만큼 지연) */
+.revealed {
+  animation: flip 0.55s ease both;
+  animation-delay: calc(var(--i) * 0.16s);
+}
+@keyframes flip {
+  0% {
+    transform: rotateX(0deg);
+    background: var(--panel-2);
+    border-color: var(--green);
+    color: var(--text);
+  }
+  49% {
+    transform: rotateX(90deg);
+    background: var(--panel-2);
+    border-color: var(--green);
+    color: var(--text);
+  }
+  50% {
+    transform: rotateX(90deg);
+    background: var(--tile-bg);
+    border-color: var(--tile-bd);
+    color: var(--tile-fg);
+  }
+  100% {
+    transform: rotateX(0deg);
+    background: var(--tile-bg);
+    border-color: var(--tile-bd);
+    color: var(--tile-fg);
+    box-shadow: 0 6px 16px -10px var(--tile-bg);
+  }
+}
+
+/* 정답 행: 공개 후 통통 튀는 승리 댄스 */
+.win .tile {
+  animation:
+    flip 0.5s ease both calc(var(--i) * 0.14s),
+    dance 0.55s var(--ease-bounce) calc(0.95s + var(--i) * 0.09s);
+}
+@keyframes dance {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  30% { transform: translateY(-16px) rotate(-4deg); }
+  60% { transform: translateY(0) rotate(3deg); }
+  80% { transform: translateY(-5px) rotate(0); }
+}
+
+/* 입력 미완성 흔들기 */
+.shake { animation: shake 0.42s ease; }
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+
+/* 실패: 보드 전체 흔들림 + 살짝 탈색 */
+.lost { animation: boardShake 0.55s ease; }
+@keyframes boardShake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-10px) rotate(-0.6deg); }
+  30% { transform: translateX(9px) rotate(0.6deg); }
+  45% { transform: translateX(-7px); }
+  60% { transform: translateX(6px); }
+  75% { transform: translateX(-3px); }
+}
+
+@media (max-width: 480px) {
+  .board { gap: 6px; max-width: calc(var(--slots) * 54px); }
+  .row { gap: 6px; }
+  .tile { border-radius: 11px; }
+}
+
+/* 모션 최소화 선호 시 애니메이션 축소 */
+@media (prefers-reduced-motion: reduce) {
+  .revealed, .win .tile, .shake, .lost, .pop { animation: none !important; }
+  .revealed { background: var(--tile-bg); border-color: var(--tile-bd); color: var(--tile-fg); }
+}

@@ -1,0 +1,123 @@
+/* ===== 랭킹 보드 ===== */
+.wrap {
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg-soft) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: 0 12px 30px -22px rgba(0, 0, 0, 0.9);
+}
+.compact { padding: 14px; }
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.prompt { color: var(--green); }
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--pink);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pink);
+  box-shadow: 0 0 8px var(--pink);
+  animation: pulse 1.3s ease-in-out infinite;
+}
+@keyframes pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
+
+.hint, .error {
+  font-size: 0.84rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 18px 6px;
+  margin: 0;
+}
+.error { color: var(--amber); line-height: 1.5; }
+.blink { animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.item {
+  display: grid;
+  grid-template-columns: 30px 1fr auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  background: var(--panel-2);
+  border: 1px solid transparent;
+  font-size: 0.82rem;
+  animation: slidein 0.3s ease both;
+}
+@keyframes slidein {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.top3 { background: linear-gradient(90deg, rgba(61, 220, 151, 0.1), var(--panel-2)); }
+.mine {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(61, 220, 151, 0.22);
+  animation: mineglow 1.6s ease-in-out infinite;
+}
+@keyframes mineglow {
+  50% { box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.35); }
+}
+
+.rank {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  text-align: center;
+  color: var(--text);
+}
+.nick {
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.challenge {
+  background: rgba(255, 126, 182, 0.18);
+  color: var(--pink);
+}
+.stat {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  text-align: right;
+  min-width: 34px;
+}

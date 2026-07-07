@@ -1,0 +1,36 @@
+rules_version = '2';
+
+// -----------------------------------------------------------------------------
+// Firestore 보안 규칙 — rankings 컬렉션
+//  - 읽기: 누구나(랭킹 공개)
+//  - 생성: 익명 로그인 사용자만, 스키마/범위 검증 통과 시
+//  - 수정/삭제: 금지 (조작 방지)
+// -----------------------------------------------------------------------------
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /rankings/{docId} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+        && isValidScore(request.resource.data);
+
+      allow update, delete: if false;
+    }
+
+    function isValidScore(d) {
+      return d.keys().hasAll(['nickname', 'stage', 'attempts', 'timeMs', 'uid', 'createdAt'])
+        && d.nickname is string
+        && d.nickname.size() >= 1 && d.nickname.size() <= 12
+        && d.stage is int && d.stage >= 1 && d.stage <= 2
+        && d.attempts is int && d.attempts >= 1 && d.attempts <= 6
+        && d.timeMs is int && d.timeMs >= 0
+        && d.uid is string && d.uid == request.auth.uid;
+    }
+
+    // 그 외 모든 경로 접근 금지
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
