@@ -6,16 +6,19 @@
 import { useState } from 'react'
 import Mascot from './Mascot'
 import Leaderboard from './Leaderboard'
+import Stats from './Stats'
 import { getDailyKey } from '../utils/daily'
+import { winRate } from '../utils/stats'
 import styles from '../styles/Intro.module.css'
 
-export default function IntroScreen({ onStart, defaultNick = '' }) {
+export default function IntroScreen({ onStart, onViewDaily, stats, defaultNick = '' }) {
   const [nick, setNick] = useState(defaultNick)
   const [error, setError] = useState('')
+  const [showStats, setShowStats] = useState(false)
 
   const dailyKey = getDailyKey()
   const dailyDoneHere =
-    typeof localStorage !== 'undefined' && localStorage.getItem(`daily-done-${dailyKey}`)
+    typeof localStorage !== 'undefined' && !!localStorage.getItem(`daily-done-${dailyKey}`)
 
   const start = (mode) => {
     const v = nick.trim()
@@ -23,7 +26,16 @@ export default function IntroScreen({ onStart, defaultNick = '' }) {
       setError('닉네임을 입력해야 시작할 수 있어요!')
       return
     }
+    setError('')
     onStart(v.slice(0, 12), mode)
+  }
+  const onDaily = () => {
+    // 이미 오늘 참여했으면 랭킹 열람만
+    if (dailyDoneHere) {
+      onViewDaily?.()
+      return
+    }
+    start('daily')
   }
   const submit = (e) => {
     e.preventDefault()
@@ -72,15 +84,17 @@ export default function IntroScreen({ onStart, defaultNick = '' }) {
               </button>
               <button
                 type="button"
-                className={`${styles.startBtn} ${styles.dailyBtn}`}
-                onClick={() => start('daily')}
+                className={`${styles.startBtn} ${styles.dailyBtn} ${dailyDoneHere ? styles.dailyDone : ''}`}
+                onClick={onDaily}
               >
-                📅 오늘의 챌린지
+                {dailyDoneHere ? '📊 데일리 랭킹 보기' : '📅 오늘의 챌린지'}
                 {dailyDoneHere && <span className={styles.doneTag}> ✓</span>}
               </button>
             </div>
             <p className={styles.modeHint}>
-              오늘의 챌린지는 <b>모두 같은 단어</b> · <b>닉네임당 하루 1회</b>
+              {dailyDoneHere
+                ? '오늘의 챌린지는 이미 참여 완료 — 랭킹만 볼 수 있어요 🌙'
+                : <>오늘의 챌린지는 <b>모두 같은 단어</b> · <b>닉네임당 하루 1회</b></>}
             </p>
           </form>
 
@@ -92,6 +106,20 @@ export default function IntroScreen({ onStart, defaultNick = '' }) {
           <p className={styles.tip}>
             쌍자음(ㄲ·ㄸ·ㅃ·ㅆ·ㅉ)은 <b>기본 자음 2번</b>! (예: 토<b>끼</b> → …ㄱ ㄱ ㅣ)
           </p>
+
+          {stats && stats.played > 0 && (
+            <div className={styles.myStats}>
+              <button
+                type="button"
+                className={styles.statsToggle}
+                onClick={() => setShowStats((v) => !v)}
+              >
+                📊 내 기록 · {stats.played}판 · 승률 {winRate(stats)}% · 🔥{stats.streak}
+                <span className={styles.chev}>{showStats ? '▲' : '▼'}</span>
+              </button>
+              {showStats && <Stats stats={stats} compact />}
+            </div>
+          )}
         </div>
       </div>
 

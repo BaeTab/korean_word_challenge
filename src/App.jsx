@@ -11,14 +11,26 @@ import Modal from './components/Modal'
 import Mascot from './components/Mascot'
 import ConfettiBurst from './components/ConfettiBurst'
 import IntroScreen from './components/IntroScreen'
+import Stats from './components/Stats'
 import { useWordleGame } from './hooks/useWordleGame'
 import { submitScore, submitDailyScore } from './services/ranking'
 import { isValidGuess, preloadGuessDict } from './constants/words'
 import { formatTime, stageLabel } from './utils/format'
 import { buildShareText, shareResult } from './utils/share'
 import { getDailyKey } from './utils/daily'
+import { loadStats, recordResult } from './utils/stats'
 import { decomposeWord } from './utils/hangul'
 import styles from './styles/App.module.css'
+
+/** 오늘 저장된 데일리 결과 읽기 (없으면 null) */
+function readSavedDaily(key) {
+  try {
+    const v = localStorage.getItem(`daily-done-${key}`)
+    return v ? JSON.parse(v) : null
+  } catch {
+    return null
+  }
+}
 
 export default function App() {
   const game = useWordleGame()
@@ -37,6 +49,8 @@ export default function App() {
   const [submittedId, setSubmittedId] = useState(null)
   const [dailyBusy, setDailyBusy] = useState(false)
   const [dailyDone, setDailyDone] = useState(false)
+  const [dailyViewOpen, setDailyViewOpen] = useState(false)
+  const [stats, setStats] = useState(loadStats)
   const prevStatus = useRef('playing')
   const toastTimer = useRef(null)
 
@@ -52,15 +66,27 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(''), 1500)
   }, [])
 
-  // 승패 전환 시 결과 모달 자동 오픈 (타일 뒤집기 애니메이션 후)
+  // 승패 전환 시: 통계 기록 + (데일리면) 참여 잠금 저장 + 결과 모달 오픈
   useEffect(() => {
     if (prevStatus.current === 'playing' && status !== 'playing') {
+      const won = status === 'won'
+      setStats(recordResult({ won, attempts }))
+      if (isDaily && dailyKey) {
+        try {
+          localStorage.setItem(
+            `daily-done-${dailyKey}`,
+            JSON.stringify({ won, attempts, timeMs: elapsedMs, evaluations, dateKey: dailyKey }),
+          )
+        } catch { /* noop */ }
+        setDailyDone(true)
+      }
       const delay = slots * 180 + 600
       const t = setTimeout(() => setResultOpen(true), delay)
       prevStatus.current = status
       return () => clearTimeout(t)
     }
     prevStatus.current = status
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, slots])
 
   // Enter: 미완성 / 사전에 없는 단어면 흔들기 + 토스트
@@ -105,6 +131,16 @@ export default function App() {
     else if (r === 'shared') showToast('공유 완료! 🎉')
     else if (r === 'fail') showToast('복사에 실패했어요 😢')
   }
+  const shareSaved = async (saved) => {
+    const text = buildShareText({
+      stage: 1, attempts: saved.attempts, maxRows, timeMs: saved.timeMs,
+      evaluations: saved.evaluations || [], won: saved.won, dailyKey: saved.dateKey,
+    })
+    const r = await shareResult(text)
+    if (r === 'copied') showToast('결과 복사 완료! 📋')
+    else if (r === 'shared') showToast('공유 완료! 🎉')
+    else if (r === 'fail') showToast('복사에 실패했어요 😢')
+  }
   const submitDaily = async () => {
     if (status !== 'won' || dailyBusy) return
     setDailyBusy(true)
@@ -112,7 +148,6 @@ export default function App() {
       const id = await submitDailyScore({ nickname, dateKey: dailyKey, attempts, timeMs: elapsedMs })
       setSubmittedId(id)
       setDailyDone(true)
-      localStorage.setItem(`daily-done-${dailyKey}`, JSON.stringify({ attempts, timeMs: elapsedMs }))
       showToast('데일리 랭킹 등록 완료! 🏆')
     } catch (e) {
       if (e?.code === 'permission-denied') {
@@ -136,9 +171,52 @@ export default function App() {
   const mascotMood = isWon ? 'happy' : isLost ? 'sad' : 'idle'
   const winRow = isWon ? attempts - 1 : -1
 
-  // 인트로: 닉네임 입력 후 시작
+  // 인트로: 닉네임 입력 후 시작. 데일리 이미 참여했으면 랭킹 열람만.
   if (!started) {
-    return <IntroScreen onStart={handleStart} defaultNick={nickname} />
+    const savedDaily = readSavedDaily(getDailyKey())
+    return (
+      <>
+        <IntroScreen
+          onStart={handleStart}
+          onViewDaily={() => setDailyViewOpen(true)}
+          stats={stats}
+          defaultNick={nickname}
+        />
+        {toast && <div className={styles.globalToast} role="status">{toast}</div>}
+        <Modal
+          open={dailyViewOpen}
+          title={`daily-${getDailyKey()}`}
+          onClose={() => setDailyViewOpen(false)}
+        >
+          <div className={styles.result}>
+            <Mascot mood="idle" size={84} />
+            <h2 className={styles.resultTitle}>오늘의 챌린지 랭킹 📅</h2>
+            <p className={styles.resultDesc}>
+              오늘은 이미 참여했어요 — <b className={styles.answerWord}>랭킹만 확인</b>할 수 있어요.
+            </p>
+            {savedDaily && (
+              <div className={styles.resultStats}>
+                <span>{savedDaily.won ? '✅ 성공' : '❌ 실패'}</span>
+                {savedDaily.won && <span>🎯 {savedDaily.attempts}번</span>}
+                {savedDaily.won && <span>⏱ {formatTime(savedDaily.timeMs)}</span>}
+              </div>
+            )}
+            {savedDaily?.evaluations?.length > 0 && (
+              <button
+                className={`${styles.btn} ${styles.btnShare}`}
+                onClick={() => shareSaved(savedDaily)}
+                style={{ marginTop: 10 }}
+              >
+                📋 결과 공유하기
+              </button>
+            )}
+            <div className={styles.resultRanking}>
+              <DailyBoard dateKey={getDailyKey()} compact />
+            </div>
+          </div>
+        </Modal>
+      </>
+    )
   }
 
   return (
@@ -292,6 +370,10 @@ export default function App() {
                 <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRestart}>↩ 처음부터</button>
               </>
             )}
+          </div>
+
+          <div className={styles.resultRanking}>
+            <Stats stats={stats} highlight={isWon ? attempts : -1} compact />
           </div>
 
           <div className={styles.resultRanking}>

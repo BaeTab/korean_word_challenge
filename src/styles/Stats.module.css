@@ -1,0 +1,68 @@
+/* ===== 개인 통계 ===== */
+.stats { width: 100%; }
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+.cellValue {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--green);
+}
+.cellLabel {
+  font-size: 0.62rem;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+.dist { display: flex; flex-direction: column; gap: 5px; }
+.distTitle {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+.row { display: grid; grid-template-columns: 16px 1fr; align-items: center; gap: 8px; }
+.num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+.track { width: 100%; }
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--border);
+  transition: width 0.5s var(--ease-bounce);
+}
+.bar.hi { background: linear-gradient(90deg, var(--green-soft), var(--green)); }
+.count {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.bar.hi .count { color: #06231a; }
+
+.compact .cellValue { font-size: 0.95rem; }
