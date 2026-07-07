@@ -106,16 +106,24 @@ export function useWordleGame() {
       const lost = !won && guesses.length >= MAX_ROWS
       const status = won ? 'won' : lost ? 'lost' : 'playing'
 
-      // 클리어 시 성적 기록 (더 높은 스테이지면 갱신). 힌트 페널티를 시간에 가산.
+      // 클리어 시 성적 기록. 시간은 스테이지별 독립(타이머는 스테이지 시작 때 리셋됨).
       if (won) {
         const result = {
           stage: g.stage,
           attempts: guesses.length,
           timeMs: Math.max(0, Date.now() - startRef.current) + g.penaltyMs,
         }
-        setBestResult((prev) =>
-          !prev || g.stage > prev.stage ? result : prev,
-        )
+        setBestResult((prev) => {
+          if (!prev) return result
+          if (g.stage > prev.stage) return result // 더 높은 스테이지 우선
+          if (g.stage === prev.stage) {
+            const better =
+              result.attempts < prev.attempts ||
+              (result.attempts === prev.attempts && result.timeMs < prev.timeMs)
+            return better ? result : prev
+          }
+          return prev
+        })
       }
 
       return { ...g, guesses, current: [], keyStates, status }
@@ -135,8 +143,10 @@ export function useWordleGame() {
     setGame((g) => freshGame(5, prevAnswer(g)))
   }, [])
 
-  /** 5글자 클리어 후 6글자 챌린지로 진입 (타이머는 누적 유지). */
+  /** 5글자 클리어 후 6글자 챌린지로 진입. 시간은 스테이지별로 독립 측정(타이머 리셋). */
   const startChallenge = useCallback(() => {
+    startRef.current = Date.now()
+    setNow(Date.now())
     setGame((g) => freshGame(6, prevAnswer(g)))
   }, [])
 
