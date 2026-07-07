@@ -32,6 +32,9 @@ function readSavedDaily(key) {
   }
 }
 
+// 랭킹 시스템 개편 공지 — 버전 문자열을 바꾸면 다시 한 번 노출된다.
+const RANKING_NOTICE_KEY = 'notice-ranking-revamp-v1'
+
 export default function App() {
   const game = useWordleGame()
   const {
@@ -48,6 +51,7 @@ export default function App() {
   const [submittedId, setSubmittedId] = useState(null)
   const [dailyDone, setDailyDone] = useState(false)
   const [dailyViewOpen, setDailyViewOpen] = useState(false)
+  const [noticeOpen, setNoticeOpen] = useState(false)
   const [regState, setRegState] = useState('idle') // idle|submitting|done|already|error
   const [stats, setStats] = useState(loadStats)
   const prevStatus = useRef('playing')
@@ -57,6 +61,16 @@ export default function App() {
   // 추측 사전을 백그라운드로 미리 로드(닉네임 입력 동안 준비 완료되게)
   useEffect(() => {
     preloadGuessDict()
+  }, [])
+
+  // 랭킹 시스템 개편 공지 — 접속 시 한 번만 노출
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(RANKING_NOTICE_KEY)) {
+        setNoticeOpen(true)
+        localStorage.setItem(RANKING_NOTICE_KEY, '1')
+      }
+    } catch { /* noop */ }
   }, [])
 
   // 짧은 안내 토스트
@@ -236,6 +250,29 @@ export default function App() {
             <div className={styles.resultRanking}>
               <DailyBoard dateKey={getDailyKey()} compact />
             </div>
+          </div>
+        </Modal>
+        <Modal
+          open={noticeOpen}
+          title="notice"
+          onClose={() => setNoticeOpen(false)}
+        >
+          <div className={styles.result}>
+            <Mascot mood="happy" size={72} />
+            <h2 className={styles.resultTitle}>랭킹 시스템이 개편됐어요 📢</h2>
+            <p className={styles.resultDesc}>
+              이제 랭킹은 <b className={styles.answerWord}>매주 월요일 00시</b>에 초기화돼요.
+              <br />
+              같은 사람이 여러 번 등록해도 쌓이지 않고,{' '}
+              <b className={styles.answerWord}>가장 잘한 기록 1개만</b> 랭킹에 남아요.
+            </p>
+            <button
+              className={styles.btn}
+              onClick={() => setNoticeOpen(false)}
+              style={{ marginTop: 10 }}
+            >
+              확인했어요
+            </button>
           </div>
         </Modal>
       </>

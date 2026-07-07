@@ -4,6 +4,7 @@
       "collectionGroup": "rankings",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "weekKey", "order": "ASCENDING" },
         { "fieldPath": "stage", "order": "DESCENDING" },
         { "fieldPath": "attempts", "order": "ASCENDING" },
         { "fieldPath": "timeMs", "order": "ASCENDING" }

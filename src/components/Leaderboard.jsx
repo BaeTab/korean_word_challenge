@@ -1,12 +1,14 @@
 // -----------------------------------------------------------------------------
 // Leaderboard — 실시간 랭킹 보드 (6칸 챌린지 / 5칸 기본 분리)
 //  - Firestore onSnapshot 구독으로 실시간 갱신
-//  - 스테이지별로 나눠 각각 Top N 표시
+//  - 스테이지별로 나눠 각각 Top N 표시(닉네임당 최고기록 1개)
 //  - highlightId: 방금 등록한 내 문서 강조
+//  - 매주 월요일 00시(KST) 초기화 + 다음 초기화까지 카운트다운
 // -----------------------------------------------------------------------------
 import { useEffect, useState } from 'react'
 import { subscribeTopRanking } from '../services/ranking'
 import { formatTime, rankBadge } from '../utils/format'
+import { msUntilNextWeekReset, formatWeekCountdown } from '../utils/week'
 import styles from '../styles/Leaderboard.module.css'
 
 const PER_STAGE = 8
@@ -41,6 +43,7 @@ function StageList({ title, icon, rows, highlightId, accent }) {
 export default function Leaderboard({ highlightId, compact = false }) {
   const [rows, setRows] = useState([])
   const [status, setStatus] = useState('loading') // loading | ready | error
+  const [countdown, setCountdown] = useState(msUntilNextWeekReset())
 
   useEffect(() => {
     const unsub = subscribeTopRanking(
@@ -52,6 +55,11 @@ export default function Leaderboard({ highlightId, compact = false }) {
       100,
     )
     return () => unsub()
+  }, [])
+
+  useEffect(() => {
+    const id = setInterval(() => setCountdown(msUntilNextWeekReset()), 1000)
+    return () => clearInterval(id)
   }, [])
 
   const stage6 = rows.filter((r) => r.stage >= 2).slice(0, PER_STAGE)
@@ -67,6 +75,8 @@ export default function Leaderboard({ highlightId, compact = false }) {
           <i className={styles.dot} /> LIVE
         </span>
       </header>
+
+      <p className={styles.countdown}>다음 초기화까지 ⏳ <b>{formatWeekCountdown(countdown)}</b></p>
 
       {status === 'loading' && (
         <p className={styles.hint}>랭킹 불러오는 중… <span className={styles.blink}>▍</span></p>

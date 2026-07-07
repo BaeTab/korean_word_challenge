@@ -1,0 +1,71 @@
+/* ===== PWA 설치 유도 배너 ===== */
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 14px 30px -18px rgba(0, 0, 0, 0.8);
+  animation: slideDown 0.35s var(--ease-bounce) both;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.text {
+  font-size: 0.85rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+.text b {
+  color: var(--green);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.install {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--correct-ink);
+  background: var(--green);
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+.install:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.close {
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--text-dim);
+  padding: 4px 6px;
+}
+.close:hover {
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .banner {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .actions {
+    justify-content: center;
+  }
+}
