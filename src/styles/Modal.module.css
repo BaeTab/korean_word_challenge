@@ -8,7 +8,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding:
+    calc(20px + env(safe-area-inset-top)) 16px
+    calc(20px + env(safe-area-inset-bottom));
   animation: fade 0.25s ease;
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
@@ -16,6 +18,9 @@
 .window {
   width: 100%;
   max-width: 420px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -35,6 +40,7 @@
   padding: 10px 14px;
   background: var(--bg-soft);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .dots { display: inline-flex; gap: 6px; }
 .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
@@ -55,7 +61,14 @@
 }
 .closeBtn:hover { background: var(--panel-2); color: var(--pink); }
 
-.body { padding: 22px 20px 24px; }
+.body {
+  padding: 22px 20px 24px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 @media (max-width: 480px) {
   .body { padding: 18px 16px 20px; }
