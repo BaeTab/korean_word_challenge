@@ -1,0 +1,49 @@
+name: Deploy to Firebase Hosting
+
+# main 브랜치 푸시 시 자동 빌드 + 배포 (수동 실행도 가능)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 동시 배포 방지 (겹치면 최신 것만)
+concurrency:
+  group: firebase-hosting-deploy
+  cancel-in-progress: false
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    env:
+      # 시크릿 존재 여부(문자열 'true'/'false') — 없으면 배포 단계 스킵
+      HAS_SECRET: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to Firebase Hosting (live)
+        if: env.HAS_SECRET == 'true'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          channelId: live
+          projectId: word-challengee
+
+      - name: Notice (secret 미설정)
+        if: env.HAS_SECRET != 'true'
+        run: |
+          echo "::warning::FIREBASE_SERVICE_ACCOUNT 시크릿이 없어 배포를 건너뜁니다."
+          echo "GitHub → Settings → Secrets and variables → Actions 에 서비스 계정 JSON을 추가하세요."
