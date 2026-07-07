@@ -6,24 +6,27 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Board from './components/Board'
 import Keyboard from './components/Keyboard'
 import Leaderboard from './components/Leaderboard'
+import DailyBoard from './components/DailyBoard'
 import Modal from './components/Modal'
 import Mascot from './components/Mascot'
 import ConfettiBurst from './components/ConfettiBurst'
 import IntroScreen from './components/IntroScreen'
 import { useWordleGame } from './hooks/useWordleGame'
-import { submitScore } from './services/ranking'
+import { submitScore, submitDailyScore } from './services/ranking'
 import { isValidGuess, preloadGuessDict } from './constants/words'
 import { formatTime, stageLabel } from './utils/format'
 import { buildShareText, shareResult } from './utils/share'
+import { getDailyKey } from './utils/daily'
 import { decomposeWord } from './utils/hangul'
 import styles from './styles/App.module.css'
 
 export default function App() {
   const game = useWordleGame()
   const {
-    started, slots, stage, status, keyStates, attempts, maxRows, grid, evaluations,
+    started, isDaily, dailyKey, slots, stage, status, keyStates, attempts, maxRows, grid, evaluations,
     elapsedMs, current, currentLength, answer, bestResult, hintUsed, penaltyMs,
-    begin, pressKey, pressDelete, clearCurrent, useHint, pressEnter, startChallenge, retrySameMode, restart,
+    begin, beginDaily, pressKey, pressDelete, clearCurrent, useHint, pressEnter,
+    startChallenge, retrySameMode, restart, exitToIntro,
   } = game
 
   const [nickname, setNickname] = useState('')
@@ -32,6 +35,8 @@ export default function App() {
   const [resultOpen, setResultOpen] = useState(false)
   const [registerOpen, setRegisterOpen] = useState(false)
   const [submittedId, setSubmittedId] = useState(null)
+  const [dailyBusy, setDailyBusy] = useState(false)
+  const [dailyDone, setDailyDone] = useState(false)
   const prevStatus = useRef('playing')
   const toastTimer = useRef(null)
 
@@ -79,26 +84,55 @@ export default function App() {
     pressEnter()
   }, [status, currentLength, slots, attempts, current, pressEnter, clearCurrent, showToast])
 
-  const handleStart = (nick) => {
+  const handleStart = (nick, mode) => {
     setNickname(nick)
-    begin()
+    setSubmittedId(null)
+    if (mode === 'daily') {
+      const key = getDailyKey()
+      setDailyDone(!!localStorage.getItem(`daily-done-${key}`))
+      beginDaily(key)
+    } else {
+      begin()
+    }
   }
   const handleShare = async () => {
     const text = buildShareText({
-      stage, attempts, maxRows, timeMs: elapsedMs, evaluations, won: status === 'won',
+      stage, attempts, maxRows, timeMs: elapsedMs, evaluations,
+      won: status === 'won', dailyKey: isDaily ? dailyKey : undefined,
     })
     const r = await shareResult(text)
     if (r === 'copied') showToast('결과 복사 완료! 붙여넣기 해보세요 📋')
     else if (r === 'shared') showToast('공유 완료! 🎉')
     else if (r === 'fail') showToast('복사에 실패했어요 😢')
   }
+  const submitDaily = async () => {
+    if (status !== 'won' || dailyBusy) return
+    setDailyBusy(true)
+    try {
+      const id = await submitDailyScore({ nickname, dateKey: dailyKey, attempts, timeMs: elapsedMs })
+      setSubmittedId(id)
+      setDailyDone(true)
+      localStorage.setItem(`daily-done-${dailyKey}`, JSON.stringify({ attempts, timeMs: elapsedMs }))
+      showToast('데일리 랭킹 등록 완료! 🏆')
+    } catch (e) {
+      if (e?.code === 'permission-denied') {
+        setDailyDone(true)
+        showToast('이 닉네임은 오늘 이미 참여했어요 🙅')
+      } else {
+        showToast('등록 실패 😢 잠시 후 다시 시도해주세요')
+      }
+    } finally {
+      setDailyBusy(false)
+    }
+  }
   const goChallenge = () => { setResultOpen(false); setSubmittedId(null); startChallenge() }
   const goRetry = () => { setResultOpen(false); setSubmittedId(null); retrySameMode() }
   const goRestart = () => { setResultOpen(false); setSubmittedId(null); restart() }
+  const goIntro = () => { setResultOpen(false); setSubmittedId(null); exitToIntro() }
 
   const isWon = status === 'won'
   const isLost = status === 'lost'
-  const canChallenge = isWon && stage === 1
+  const canChallenge = isWon && stage === 1 && !isDaily
   const mascotMood = isWon ? 'happy' : isLost ? 'sad' : 'idle'
   const winRow = isWon ? attempts - 1 : -1
 
@@ -127,8 +161,8 @@ export default function App() {
         <div className={styles.stats}>
           <div className={styles.statBox}>
             <span className={styles.statLabel}>MODE</span>
-            <span className={`${styles.statValue} ${stage >= 2 ? styles.hot : ''}`}>
-              {stageLabel(stage)}
+            <span className={`${styles.statValue} ${(stage >= 2 || isDaily) ? styles.hot : ''}`}>
+              {isDaily ? '📅 데일리' : stageLabel(stage)}
             </span>
           </div>
           <div className={styles.statBox}>
@@ -193,7 +227,7 @@ export default function App() {
           {isWon ? (
             <>
               <h2 className={styles.resultTitle}>
-                {stage >= 2 ? '챌린지 정복! 🏆' : '정답이에요! 🎉'}
+                {isDaily ? '오늘의 챌린지 성공! 🎯' : stage >= 2 ? '챌린지 정복! 🏆' : '정답이에요! 🎉'}
               </h2>
               <p className={styles.resultDesc}>
                 정답은 <b className={styles.answerWord}>{answer}</b>
@@ -202,7 +236,7 @@ export default function App() {
               <div className={styles.resultStats}>
                 <span>🎯 {attempts}번 시도</span>
                 <span>⏱ {formatTime(elapsedMs)}</span>
-                <span>🏅 {stageLabel(stage)}</span>
+                <span>🏅 {isDaily ? `데일리 #${dailyKey}` : stageLabel(stage)}</span>
               </div>
             </>
           ) : (
@@ -222,20 +256,48 @@ export default function App() {
                 🔥 6칸 챌린지 도전!
               </button>
             )}
-            {bestResult && (
-              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setRegisterOpen(true)}>
-                🏆 랭킹 등록하기
-              </button>
+
+            {/* 데일리 모드: 하루 1회 등록 / 일반 모드: 랭킹 등록 모달 */}
+            {isDaily ? (
+              isWon && (
+                dailyDone ? (
+                  <div className={styles.dailyDoneNote}>오늘의 챌린지 참여 완료 ✓</div>
+                ) : (
+                  <button
+                    className={`${styles.btn} ${styles.btnPrimary}`}
+                    onClick={submitDaily}
+                    disabled={dailyBusy}
+                  >
+                    {dailyBusy ? '등록 중…' : '🏆 데일리 랭킹 등록 (하루 1회)'}
+                  </button>
+                )
+              )
+            ) : (
+              bestResult && (
+                <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setRegisterOpen(true)}>
+                  🏆 랭킹 등록하기
+                </button>
+              )
             )}
+
             <button className={`${styles.btn} ${styles.btnShare}`} onClick={handleShare}>
               📋 결과 공유하기
             </button>
-            <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRetry}>🔄 같은 모드 다시</button>
-            <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRestart}>↩ 처음부터</button>
+
+            {isDaily ? (
+              <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goIntro}>↩ 메인으로</button>
+            ) : (
+              <>
+                <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRetry}>🔄 같은 모드 다시</button>
+                <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRestart}>↩ 처음부터</button>
+              </>
+            )}
           </div>
 
           <div className={styles.resultRanking}>
-            <Leaderboard highlightId={submittedId} compact />
+            {isDaily
+              ? <DailyBoard dateKey={dailyKey} highlightId={submittedId} compact />
+              : <Leaderboard highlightId={submittedId} compact />}
           </div>
         </div>
       </Modal>

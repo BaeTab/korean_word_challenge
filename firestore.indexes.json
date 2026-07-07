@@ -8,6 +8,15 @@
         { "fieldPath": "attempts", "order": "ASCENDING" },
         { "fieldPath": "timeMs", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "daily",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "dateKey", "order": "ASCENDING" },
+        { "fieldPath": "attempts", "order": "ASCENDING" },
+        { "fieldPath": "timeMs", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

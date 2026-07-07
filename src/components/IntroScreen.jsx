@@ -6,20 +6,28 @@
 import { useState } from 'react'
 import Mascot from './Mascot'
 import Leaderboard from './Leaderboard'
+import { getDailyKey } from '../utils/daily'
 import styles from '../styles/Intro.module.css'
 
 export default function IntroScreen({ onStart, defaultNick = '' }) {
   const [nick, setNick] = useState(defaultNick)
   const [error, setError] = useState('')
 
-  const submit = (e) => {
-    e.preventDefault()
+  const dailyKey = getDailyKey()
+  const dailyDoneHere =
+    typeof localStorage !== 'undefined' && localStorage.getItem(`daily-done-${dailyKey}`)
+
+  const start = (mode) => {
     const v = nick.trim()
     if (v.length === 0) {
       setError('닉네임을 입력해야 시작할 수 있어요!')
       return
     }
-    onStart(v.slice(0, 12))
+    onStart(v.slice(0, 12), mode)
+  }
+  const submit = (e) => {
+    e.preventDefault()
+    start('normal')
   }
 
   return (
@@ -58,9 +66,22 @@ export default function IntroScreen({ onStart, defaultNick = '' }) {
               autoFocus
             />
             {error && <p className={styles.error}>{error}</p>}
-            <button type="submit" className={styles.startBtn}>
-              ▶ 게임 시작!
-            </button>
+            <div className={styles.modeBtns}>
+              <button type="submit" className={styles.startBtn}>
+                🎮 자유 플레이
+              </button>
+              <button
+                type="button"
+                className={`${styles.startBtn} ${styles.dailyBtn}`}
+                onClick={() => start('daily')}
+              >
+                📅 오늘의 챌린지
+                {dailyDoneHere && <span className={styles.doneTag}> ✓</span>}
+              </button>
+            </div>
+            <p className={styles.modeHint}>
+              오늘의 챌린지는 <b>모두 같은 단어</b> · <b>닉네임당 하루 1회</b>
+            </p>
           </form>
 
           <ul className={styles.rules}>

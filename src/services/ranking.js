@@ -11,15 +11,19 @@
 import {
   addDoc,
   collection,
+  doc,
   limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
+  where,
 } from 'firebase/firestore'
 import { db, ensureAnonymousAuth } from '../firebase'
 
 const COL = 'rankings'
+const DAILY_COL = 'daily'
 
 /**
  * 점수 등록. 익명 로그인 보장 후 문서를 추가한다.
@@ -63,6 +67,57 @@ export function subscribeTopRanking(onData, onError, top = 10) {
       // 복합 인덱스가 아직 없으면 콘솔에 인덱스 생성 링크가 찍힌다.
       // eslint-disable-next-line no-console
       console.error('[ranking] 구독 오류:', err)
+      onError?.(err)
+    },
+  )
+}
+
+// ---- 데일리 챌린지 랭킹 -------------------------------------------------------
+
+/** 닉네임을 문서 ID로 안전하게 변환('/' 제거) */
+function dailyNick(nickname) {
+  return (nickname || '익명').trim().slice(0, 12).replace(/\//g, '／') || '익명'
+}
+
+/**
+ * 데일리 점수 등록. 문서 ID = `날짜__닉네임` 으로 고정 → 규칙상 재생성(update) 불가.
+ * 같은 닉네임+날짜로 이미 참여했으면 permission-denied 로 실패한다.
+ * @param {{nickname:string, dateKey:string, attempts:number, timeMs:number}} entry
+ * @returns {Promise<string>} 생성된 문서 ID
+ */
+export async function submitDailyScore(entry) {
+  const user = await ensureAnonymousAuth()
+  const nickname = dailyNick(entry.nickname)
+  const id = `${entry.dateKey}__${nickname}`
+  await setDoc(doc(db, DAILY_COL, id), {
+    nickname,
+    dateKey: entry.dateKey,
+    attempts: entry.attempts,
+    timeMs: entry.timeMs,
+    uid: user.uid,
+    createdAt: serverTimestamp(),
+  })
+  return id
+}
+
+/**
+ * 특정 날짜의 데일리 랭킹 실시간 구독. (시도 적은 순 → 시간 짧은 순)
+ * @param {string} dateKey 'YYYY-MM-DD'
+ */
+export function subscribeDailyRanking(dateKey, onData, onError, top = 10) {
+  const q = query(
+    collection(db, DAILY_COL),
+    where('dateKey', '==', dateKey),
+    orderBy('attempts', 'asc'),
+    orderBy('timeMs', 'asc'),
+    limit(top),
+  )
+  return onSnapshot(
+    q,
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      // eslint-disable-next-line no-console
+      console.error('[daily] 구독 오류:', err)
       onError?.(err)
     },
   )

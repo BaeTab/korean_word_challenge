@@ -96,6 +96,14 @@
   padding: 10px 4px;
   margin: 0;
 }
+.countdown {
+  margin: 0 0 10px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+.countdown b { color: var(--amber); }
 @keyframes slidein {
   from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: translateX(0); }

@@ -7,6 +7,7 @@
 //  두 목록 모두 런타임에 length·isTypable 로 재검증하여 안전.
 // -----------------------------------------------------------------------------
 import { decomposeWord, isTypable } from '../utils/hangul'
+import { seededPick } from '../utils/daily'
 import { ANSWERS } from './answers'
 
 const key = (w) => decomposeWord(w).join('')
@@ -55,6 +56,14 @@ export function isValidGuess(jamoArr, slots) {
   }
   const set = slots === 6 ? _set6 : _set5
   return set.has(jamoArr.join(''))
+}
+
+/**
+ * 데일리 챌린지용 '오늘의 단어'(5칸). 날짜키가 같으면 항상 같은 단어.
+ * @param {string} dateKey 'YYYY-MM-DD'
+ */
+export function pickDailyWord(dateKey) {
+  return seededPick(WORD_LIST_5, dateKey)
 }
 
 /**

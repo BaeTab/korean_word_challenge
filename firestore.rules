@@ -28,6 +28,23 @@ service cloud.firestore {
         && d.uid is string && d.uid == request.auth.uid;
     }
 
+    // 데일리 챌린지 랭킹 — 문서 ID가 `날짜__닉네임` 이라 update 금지로 하루 1회 강제
+    match /daily/{docId} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidDaily(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    function isValidDaily(d) {
+      return d.keys().hasAll(['nickname', 'dateKey', 'attempts', 'timeMs', 'uid', 'createdAt'])
+        && d.nickname is string
+        && d.nickname.size() >= 1 && d.nickname.size() <= 12
+        && d.dateKey is string && d.dateKey.size() == 10
+        && d.attempts is int && d.attempts >= 1 && d.attempts <= 6
+        && d.timeMs is int && d.timeMs >= 0
+        && d.uid is string && d.uid == request.auth.uid;
+    }
+
     // 그 외 모든 경로 접근 금지
     match /{document=**} {
       allow read, write: if false;

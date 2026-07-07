@@ -13,7 +13,7 @@ import {
   TILE,
 } from '../utils/hangul'
 import { obfuscate, deobfuscate } from '../utils/secret'
-import { pickRandomWord } from '../constants/words'
+import { pickRandomWord, pickDailyWord } from '../constants/words'
 
 export const MAX_ROWS = 6
 export const HINT_PENALTY_MS = 30000 // 힌트 1회당 시간 페널티(+30초)
@@ -21,9 +21,10 @@ export const HINT_PENALTY_MS = 30000 // 힌트 1회당 시간 페널티(+30초)
 /**
  * 새 게임 상태 생성.
  * 정답은 평문으로 두지 않고 answerEnc(난독화)만 보관한다. (anti-peek)
+ * @param {object} [opts] { fixedWord, daily, dailyKey }
  */
-function freshGame(slots, exclude) {
-  const answer = pickRandomWord(slots, exclude)
+function freshGame(slots, exclude, opts = {}) {
+  const answer = opts.fixedWord || pickRandomWord(slots, exclude)
   return {
     slots,
     stage: slots === 6 ? 2 : 1,
@@ -34,6 +35,8 @@ function freshGame(slots, exclude) {
     status: 'playing', // 'playing' | 'won' | 'lost'
     hintUsed: false, // 스테이지당 힌트 1회
     penaltyMs: 0, // 힌트 사용 누적 페널티
+    isDaily: !!opts.daily, // 데일리 챌린지 여부
+    dailyKey: opts.dailyKey || null, // 'YYYY-MM-DD'
   }
 }
 
@@ -143,6 +146,17 @@ export function useWordleGame() {
     setGame((g) => freshGame(5, prevAnswer(g)))
   }, [])
 
+  /** 데일리 챌린지 시작 — 날짜 기준 고정 단어(5칸), 챌린지 진행 없음. */
+  const beginDaily = useCallback((dateKey) => {
+    startRef.current = Date.now()
+    setNow(Date.now())
+    setBestResult(null)
+    setStarted(true)
+    setGame(() =>
+      freshGame(5, undefined, { fixedWord: pickDailyWord(dateKey), daily: true, dailyKey: dateKey }),
+    )
+  }, [])
+
   /** 5글자 클리어 후 6글자 챌린지로 진입. 시간은 스테이지별로 독립 측정(타이머 리셋). */
   const startChallenge = useCallback(() => {
     startRef.current = Date.now()
@@ -158,9 +172,21 @@ export function useWordleGame() {
     setGame((g) => freshGame(5, prevAnswer(g)))
   }, [])
 
-  /** 같은 모드에서 새 단어로 다시 (지금 스테이지 유지, 타이머 누적). */
+  /** 인트로(모드 선택) 화면으로 돌아간다. */
+  const exitToIntro = useCallback(() => {
+    setStarted(false)
+    setBestResult(null)
+  }, [])
+
+  /** 같은 모드로 다시 (새 단어, 타이머 리셋). 데일리면 같은 오늘의 단어로 재도전. */
   const retrySameMode = useCallback(() => {
-    setGame((g) => freshGame(g.slots, prevAnswer(g)))
+    startRef.current = Date.now()
+    setNow(Date.now())
+    setGame((g) =>
+      g.isDaily
+        ? freshGame(5, undefined, { fixedWord: pickDailyWord(g.dailyKey), daily: true, dailyKey: g.dailyKey })
+        : freshGame(g.slots, prevAnswer(g)),
+    )
   }, [])
 
   // ---- 렌더용 그리드 파생 -------------------------------------------------
@@ -191,6 +217,8 @@ export function useWordleGame() {
   return {
     // 상태
     started,
+    isDaily: game.isDaily,
+    dailyKey: game.dailyKey,
     slots: game.slots,
     stage: game.stage,
     answer,
@@ -208,6 +236,7 @@ export function useWordleGame() {
     bestResult,
     // 액션
     begin,
+    beginDaily,
     pressKey,
     pressDelete,
     clearCurrent,
@@ -216,5 +245,6 @@ export function useWordleGame() {
     startChallenge,
     retrySameMode,
     restart,
+    exitToIntro,
   }
 }
