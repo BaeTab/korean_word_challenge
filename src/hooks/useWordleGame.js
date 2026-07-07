@@ -201,6 +201,7 @@ export function useWordleGame() {
     currentLength: game.current.length,
     maxRows: MAX_ROWS,
     grid,
+    evaluations: game.guesses.map((g) => g.evaluation), // 제출된 행별 판정(공유용)
     elapsedMs,
     penaltyMs: game.penaltyMs,
     hintUsed: game.hintUsed,

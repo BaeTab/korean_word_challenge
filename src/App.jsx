@@ -14,13 +14,14 @@ import { useWordleGame } from './hooks/useWordleGame'
 import { submitScore } from './services/ranking'
 import { isValidGuess, preloadGuessDict } from './constants/words'
 import { formatTime, stageLabel } from './utils/format'
+import { buildShareText, shareResult } from './utils/share'
 import { decomposeWord } from './utils/hangul'
 import styles from './styles/App.module.css'
 
 export default function App() {
   const game = useWordleGame()
   const {
-    started, slots, stage, status, keyStates, attempts, maxRows, grid,
+    started, slots, stage, status, keyStates, attempts, maxRows, grid, evaluations,
     elapsedMs, current, currentLength, answer, bestResult, hintUsed, penaltyMs,
     begin, pressKey, pressDelete, clearCurrent, useHint, pressEnter, startChallenge, retrySameMode, restart,
   } = game
@@ -81,6 +82,15 @@ export default function App() {
   const handleStart = (nick) => {
     setNickname(nick)
     begin()
+  }
+  const handleShare = async () => {
+    const text = buildShareText({
+      stage, attempts, maxRows, timeMs: elapsedMs, evaluations, won: status === 'won',
+    })
+    const r = await shareResult(text)
+    if (r === 'copied') showToast('결과 복사 완료! 붙여넣기 해보세요 📋')
+    else if (r === 'shared') showToast('공유 완료! 🎉')
+    else if (r === 'fail') showToast('복사에 실패했어요 😢')
   }
   const goChallenge = () => { setResultOpen(false); setSubmittedId(null); startChallenge() }
   const goRetry = () => { setResultOpen(false); setSubmittedId(null); retrySameMode() }
@@ -217,6 +227,9 @@ export default function App() {
                 🏆 랭킹 등록하기
               </button>
             )}
+            <button className={`${styles.btn} ${styles.btnShare}`} onClick={handleShare}>
+              📋 결과 공유하기
+            </button>
             <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRetry}>🔄 같은 모드 다시</button>
             <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRestart}>↩ 처음부터</button>
           </div>

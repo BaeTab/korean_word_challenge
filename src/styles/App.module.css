@@ -275,6 +275,11 @@
   75% { transform: rotate(1.5deg); }
 }
 .btnHot:hover { animation: none; transform: translateY(-2px) scale(1.02); }
+.btnShare {
+  background: linear-gradient(135deg, var(--blue), #4f7fd6);
+  color: #06121f;
+  box-shadow: 0 8px 22px -8px rgba(111, 177, 255, 0.7);
+}
 .btnGhost {
   background: var(--panel-2);
   border: 1px solid var(--border);
