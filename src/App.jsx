@@ -36,7 +36,7 @@ export default function App() {
   const game = useWordleGame()
   const {
     started, isDaily, dailyKey, slots, stage, status, keyStates, attempts, maxRows, grid, evaluations,
-    elapsedMs, current, currentLength, answer, bestResult, hintUsed, penaltyMs,
+    elapsedMs, current, currentLength, answer, hintUsed, penaltyMs,
     begin, beginDaily, pressKey, pressDelete, clearCurrent, useHint, pressEnter,
     startChallenge, retrySameMode, restart, exitToIntro,
   } = game
@@ -45,14 +45,14 @@ export default function App() {
   const [shakeRow, setShakeRow] = useState(-1)
   const [toast, setToast] = useState('')
   const [resultOpen, setResultOpen] = useState(false)
-  const [registerOpen, setRegisterOpen] = useState(false)
   const [submittedId, setSubmittedId] = useState(null)
-  const [dailyBusy, setDailyBusy] = useState(false)
   const [dailyDone, setDailyDone] = useState(false)
   const [dailyViewOpen, setDailyViewOpen] = useState(false)
+  const [regState, setRegState] = useState('idle') // idle|submitting|done|already|error
   const [stats, setStats] = useState(loadStats)
   const prevStatus = useRef('playing')
   const toastTimer = useRef(null)
+  const regParams = useRef(null) // 자동 등록에 쓸 이번 판 성적
 
   // 추측 사전을 백그라운드로 미리 로드(닉네임 입력 동안 준비 완료되게)
   useEffect(() => {
@@ -66,7 +66,41 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(''), 1500)
   }, [])
 
-  // 승패 전환 시: 통계 기록 + (데일리면) 참여 잠금 저장 + 결과 모달 오픈
+  // 랭킹 자동 등록 (regParams.current 기준). 실패 시 재시도 버튼에서도 호출.
+  const autoRegister = useCallback(async () => {
+    const p = regParams.current
+    if (!p) return
+    setRegState('submitting')
+    try {
+      if (p.isDaily) {
+        const id = await submitDailyScore({
+          nickname: p.nickname, dateKey: p.dailyKey, attempts: p.attempts, timeMs: p.timeMs,
+        })
+        setSubmittedId(id)
+        setDailyDone(true)
+        setRegState('done')
+        showToast('데일리 랭킹 자동 등록! 🏆')
+      } else {
+        const ref = await submitScore({
+          nickname: p.nickname, stage: p.stage, attempts: p.attempts, timeMs: p.timeMs,
+        })
+        setSubmittedId(ref.id)
+        setRegState('done')
+        showToast('랭킹 자동 등록 완료! 🏆')
+      }
+    } catch (e) {
+      if (p.isDaily && e?.code === 'permission-denied') {
+        setDailyDone(true)
+        setRegState('already')
+      } else {
+        // eslint-disable-next-line no-console
+        console.error('[auto-register] 실패:', e)
+        setRegState('error')
+      }
+    }
+  }, [showToast])
+
+  // 승패 전환 시: 통계 기록 + (데일리면) 참여 잠금 저장 + 승리 시 자동 등록 + 결과 모달 오픈
   useEffect(() => {
     if (prevStatus.current === 'playing' && status !== 'playing') {
       const won = status === 'won'
@@ -79,6 +113,14 @@ export default function App() {
           )
         } catch { /* noop */ }
         setDailyDone(true)
+      }
+      if (won) {
+        regParams.current = {
+          nickname, isDaily, dailyKey, stage, attempts, timeMs: elapsedMs + penaltyMs,
+        }
+        autoRegister()
+      } else {
+        setRegState('idle')
       }
       const delay = slots * 180 + 600
       const t = setTimeout(() => setResultOpen(true), delay)
@@ -140,25 +182,6 @@ export default function App() {
     if (r === 'copied') showToast('결과 복사 완료! 📋')
     else if (r === 'shared') showToast('공유 완료! 🎉')
     else if (r === 'fail') showToast('복사에 실패했어요 😢')
-  }
-  const submitDaily = async () => {
-    if (status !== 'won' || dailyBusy) return
-    setDailyBusy(true)
-    try {
-      const id = await submitDailyScore({ nickname, dateKey: dailyKey, attempts, timeMs: elapsedMs })
-      setSubmittedId(id)
-      setDailyDone(true)
-      showToast('데일리 랭킹 등록 완료! 🏆')
-    } catch (e) {
-      if (e?.code === 'permission-denied') {
-        setDailyDone(true)
-        showToast('이 닉네임은 오늘 이미 참여했어요 🙅')
-      } else {
-        showToast('등록 실패 😢 잠시 후 다시 시도해주세요')
-      }
-    } finally {
-      setDailyBusy(false)
-    }
   }
   const goChallenge = () => { setResultOpen(false); setSubmittedId(null); startChallenge() }
   const goRetry = () => { setResultOpen(false); setSubmittedId(null); retrySameMode() }
@@ -335,27 +358,19 @@ export default function App() {
               </button>
             )}
 
-            {/* 데일리 모드: 하루 1회 등록 / 일반 모드: 랭킹 등록 모달 */}
-            {isDaily ? (
-              isWon && (
-                dailyDone ? (
-                  <div className={styles.dailyDoneNote}>오늘의 챌린지 참여 완료 ✓</div>
-                ) : (
-                  <button
-                    className={`${styles.btn} ${styles.btnPrimary}`}
-                    onClick={submitDaily}
-                    disabled={dailyBusy}
-                  >
-                    {dailyBusy ? '등록 중…' : '🏆 데일리 랭킹 등록 (하루 1회)'}
-                  </button>
-                )
-              )
-            ) : (
-              bestResult && (
-                <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setRegisterOpen(true)}>
-                  🏆 랭킹 등록하기
-                </button>
-              )
+            {/* 승리 시 랭킹 자동 등록 상태 */}
+            {isWon && (
+              <div className={`${styles.regStatus} ${styles['reg_' + regState] || ''}`}>
+                {regState === 'submitting' && '랭킹 등록 중… ⏳'}
+                {regState === 'done' && '🏆 랭킹에 자동 등록됐어요!'}
+                {regState === 'already' && '오늘의 챌린지 참여 완료 ✓'}
+                {regState === 'error' && (
+                  <>
+                    ⚠ 랭킹 등록 실패 — 익명 로그인을 확인해 주세요
+                    <button className={styles.regRetry} onClick={autoRegister}>다시 시도</button>
+                  </>
+                )}
+              </div>
             )}
 
             <button className={`${styles.btn} ${styles.btnShare}`} onClick={handleShare}>
@@ -384,88 +399,6 @@ export default function App() {
           </div>
         </div>
       </Modal>
-
-      {/* ===== 랭킹 등록 모달 ===== */}
-      <RegisterModal
-        open={registerOpen}
-        best={bestResult}
-        defaultNick={nickname}
-        onClose={() => setRegisterOpen(false)}
-        onDone={(id) => { setSubmittedId(id); setRegisterOpen(false) }}
-      />
     </div>
-  )
-}
-
-// ---- 랭킹 등록 폼 모달 --------------------------------------------------------
-function RegisterModal({ open, best, defaultNick, onClose, onDone }) {
-  const [nickname, setNickname] = useState(defaultNick || '')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (open) {
-      setNickname(defaultNick || '')
-      setError('')
-      setBusy(false)
-    }
-  }, [open, defaultNick])
-
-  const submit = async (e) => {
-    e.preventDefault()
-    if (!best || busy) return
-    const nick = nickname.trim()
-    if (nick.length === 0) {
-      setError('닉네임을 입력해 주세요!')
-      return
-    }
-    setBusy(true)
-    setError('')
-    try {
-      const ref = await submitScore({
-        nickname: nick,
-        stage: best.stage,
-        attempts: best.attempts,
-        timeMs: best.timeMs,
-      })
-      onDone(ref.id)
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[submit] 실패:', err)
-      setError('등록에 실패했어요. 잠시 후 다시 시도해 주세요.')
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal open={open} title="submit-score" onClose={onClose} closable={!busy}>
-      <form className={styles.register} onSubmit={submit}>
-        <Mascot mood="idle" size={72} />
-        <h2 className={styles.registerTitle}>랭킹에 이름을 남겨요 ✍️</h2>
-        {best && (
-          <p className={styles.registerInfo}>
-            {stageLabel(best.stage)} · {best.attempts}회 · {formatTime(best.timeMs)}
-          </p>
-        )}
-        <input
-          className={styles.input}
-          value={nickname}
-          onChange={(e) => setNickname(e.target.value)}
-          placeholder="익명 닉네임 (최대 12자)"
-          maxLength={12}
-          autoFocus
-          disabled={busy}
-        />
-        {error && <p className={styles.formError}>{error}</p>}
-        <div className={styles.registerBtns}>
-          <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={busy}>
-            {busy ? '등록 중…' : '등록!'}
-          </button>
-          <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={onClose} disabled={busy}>
-            닫기
-          </button>
-        </div>
-      </form>
-    </Modal>
   )
 }

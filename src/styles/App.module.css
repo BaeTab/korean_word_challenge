@@ -269,6 +269,32 @@
   text-align: center;
 }
 
+/* 랭킹 자동 등록 상태 */
+.regStatus {
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.88rem;
+  text-align: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.reg_done { background: rgba(61, 220, 151, 0.12); border-color: var(--green); color: var(--green); }
+.reg_already { background: rgba(61, 220, 151, 0.1); border-color: var(--green-soft); color: var(--green); }
+.reg_error { background: rgba(255, 126, 182, 0.1); border-color: var(--pink); color: var(--pink); }
+.regRetry {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--pink);
+  color: #2a0f1c;
+  font-weight: 800;
+  font-size: 0.78rem;
+}
+
 /* 결과 모달 안 랭킹 */
 .resultRanking {
   width: 100%;
