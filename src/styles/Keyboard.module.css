@@ -93,12 +93,18 @@
   box-shadow: none;
 }
 
-/* 기능키 */
+/* 기능키 (텍스트 라벨) */
 .fn {
-  flex: 0 0 54px;
-  font-size: 1.2rem;
+  flex: 0 0 auto;
+  min-width: 58px;
+  padding: 0 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
   background: var(--panel);
 }
+.del { color: var(--pink); border-color: var(--pink); }
+.del:hover:not(:disabled) { background: rgba(255, 126, 182, 0.14); }
 .enter {
   color: var(--green);
   border-color: var(--green-soft);

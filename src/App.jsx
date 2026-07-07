@@ -22,7 +22,7 @@ export default function App() {
   const {
     started, slots, stage, status, keyStates, attempts, maxRows, grid,
     elapsedMs, current, currentLength, answer, bestResult, hintUsed, penaltyMs,
-    begin, pressKey, pressDelete, useHint, pressEnter, startChallenge, retrySameMode, restart,
+    begin, pressKey, pressDelete, clearCurrent, useHint, pressEnter, startChallenge, retrySameMode, restart,
   } = game
 
   const [nickname, setNickname] = useState('')
@@ -71,11 +71,12 @@ export default function App() {
     }
     if (!isValidGuess(current, slots)) {
       shake()
-      showToast('사전에 없는 단어예요 🤔')
+      showToast('사전에 없는 단어예요 🤔 (행 초기화)')
+      setTimeout(() => clearCurrent(), 320) // 흔들림 후 해당 행 비우기
       return
     }
     pressEnter()
-  }, [status, currentLength, slots, attempts, current, pressEnter, showToast])
+  }, [status, currentLength, slots, attempts, current, pressEnter, clearCurrent, showToast])
 
   const handleStart = (nick) => {
     setNickname(nick)

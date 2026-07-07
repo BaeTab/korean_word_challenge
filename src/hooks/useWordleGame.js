@@ -71,6 +71,11 @@ export function useWordleGame() {
     })
   }, [])
 
+  /** 현재 입력 중인 행을 통째로 비운다(사전에 없는 단어일 때 등). */
+  const clearCurrent = useCallback(() => {
+    setGame((g) => (g.status !== 'playing' || g.current.length === 0 ? g : { ...g, current: [] }))
+  }, [])
+
   /** 힌트: 다음 빈 칸의 정답 자모 1개를 채워준다. 스테이지당 1회, +30초 페널티. */
   const useHint = useCallback(() => {
     setGame((g) => {
@@ -194,6 +199,7 @@ export function useWordleGame() {
     begin,
     pressKey,
     pressDelete,
+    clearCurrent,
     useHint,
     pressEnter,
     startChallenge,

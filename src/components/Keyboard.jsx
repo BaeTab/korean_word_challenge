@@ -70,12 +70,12 @@ export default function Keyboard({ keyStates, onKey, onDelete, onEnter, disabled
           {i === 2 && (
             <button
               type="button"
-              className={`${styles.key} ${styles.fn}`}
+              className={`${styles.key} ${styles.fn} ${styles.del}`}
               onClick={onDelete}
               disabled={disabled}
-              aria-label="삭제"
+              aria-label="지움(백스페이스)"
             >
-              ⌫
+              ← 지움
             </button>
           )}
 
@@ -99,9 +99,9 @@ export default function Keyboard({ keyStates, onKey, onDelete, onEnter, disabled
               className={`${styles.key} ${styles.fn} ${styles.enter}`}
               onClick={onEnter}
               disabled={disabled}
-              aria-label="입력"
+              aria-label="입력(엔터)"
             >
-              ⏎
+              입력 ↵
             </button>
           )}
         </div>
