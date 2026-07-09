@@ -1,23 +1,21 @@
 // -----------------------------------------------------------------------------
 // 결과 공유 — 정답 노출 없이 판정 그리드(🟩🟨⬛)만 공유 (Wordle 스타일)
 // -----------------------------------------------------------------------------
-import { formatTime } from './format'
+import { stageLabel } from './format'
 
 const EMOJI = { correct: '🟩', present: '🟨', absent: '⬛' }
 const SITE = 'https://word-challengee.web.app'
 
 /**
  * 공유 텍스트 생성.
- * @param {{stage:number, attempts:number, maxRows:number, timeMs:number,
+ * @param {{stage:number, attempts:number, maxRows:number,
  *          evaluations:string[][], won:boolean, dailyKey?:string}} p
  */
 export function buildShareText(p) {
-  const mode = p.dailyKey
-    ? `데일리 #${p.dailyKey}`
-    : p.stage >= 2 ? '6칸 챌린지' : '5칸 기본'
+  const mode = p.dailyKey ? `데일리 #${p.dailyKey}` : stageLabel(p.stage)
   const face = p.won ? (p.stage >= 2 ? '🏆' : '🎉') : '😢'
   const tries = p.won ? `${p.attempts}/${p.maxRows}` : `X/${p.maxRows}`
-  const line2 = p.won ? `🎯 ${tries}   ⏱ ${formatTime(p.timeMs)}` : `🎯 ${tries}`
+  const line2 = `🎯 ${tries}`
   const grid = p.evaluations
     .map((row) => row.map((s) => EMOJI[s] || '⬛').join(''))
     .join('\n')

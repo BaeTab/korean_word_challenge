@@ -1,46 +1,56 @@
 rules_version = '2';
 
 // -----------------------------------------------------------------------------
-// Firestore 보안 규칙 — rankings 컬렉션
-//  - 읽기: 누구나(랭킹 공개)
-//  - 생성: 익명 로그인 사용자만, 스키마/범위 검증 통과 시
-//  - 수정: 기존 기록보다 나을 때만 허용(닉네임당 최고기록만 유지)
-//  - 삭제: 금지 (조작 방지)
-//  문서 ID가 `weekKey__stage__닉네임` 이라 매주 월요일(KST) 새 문서로 자연 초기화된다.
-//  (uid가 아닌 닉네임이 문서 키라 같은 닉네임을 쓰는 다른 사람과 기록을 공유하게 됨은 의도된 동작)
+// Firestore 보안 규칙
+//  - players: 참여횟수/정답률 기반 레벨 프로필(자유모드 랭킹을 대체).
+//    문서 ID = 닉네임. uid는 "마지막 작성자"일 뿐 불변 강제 안 함(같은 닉네임을
+//    다른 기기에서 써도 기록을 공유하는 기존 rankings 시절 관례를 그대로 따름).
+//  - daily: 데일리 챌린지 랭킹. 문서 ID가 `dateKey__닉네임`이라 매일 자연 초기화.
+//    schemaVersion:2로 구버전(시간요소 포함) 문서를 새 쿼리에서 배제(리셋 효과).
+//  - rankings(구 주간 랭킹)는 더이상 사용하지 않음 — 기존 문서는 보존하되
+//    아래 catch-all에 의해 read/write 모두 차단(삭제 아님, 화면에도 안 보임).
 // -----------------------------------------------------------------------------
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /rankings/{docId} {
+    match /players/{docId} {
       allow read: if true;
 
       allow create: if request.auth != null
-        && isValidScore(request.resource.data);
+        && isValidPlayerCreate(request.resource.data);
 
       allow update: if request.auth != null
-        && isValidScore(request.resource.data)
-        && request.resource.data.nickname == resource.data.nickname
-        && isBetterScore(request.resource.data, resource.data);
+        && isValidPlayerUpdate(request.resource.data, resource.data);
 
       allow delete: if false;
     }
 
-    function isValidScore(d) {
-      return d.keys().hasAll(['nickname', 'stage', 'attempts', 'timeMs', 'uid', 'weekKey', 'createdAt'])
+    function isValidPlayerCreate(d) {
+      return d.keys().hasAll(['nickname', 'uid', 'totalPlayed', 'totalWon', 'accuracyBp', 'level', 'createdAt', 'updatedAt'])
         && d.nickname is string
         && d.nickname.size() >= 1 && d.nickname.size() <= 12
-        && d.stage is int && d.stage >= 1 && d.stage <= 2
-        && d.attempts is int && d.attempts >= 1 && d.attempts <= 6
-        && d.timeMs is int && d.timeMs >= 0
-        && d.weekKey is string && d.weekKey.size() == 10
-        && d.uid is string && d.uid == request.auth.uid;
+        && d.uid is string && d.uid == request.auth.uid
+        && d.totalPlayed is int && d.totalPlayed == 1
+        && d.totalWon is int && (d.totalWon == 0 || d.totalWon == 1)
+        && d.accuracyBp is int && d.accuracyBp >= 0 && d.accuracyBp <= 10000
+        && d.accuracyBp == int(d.totalWon * 10000 / d.totalPlayed)
+        && d.level is int && d.level == int(d.totalPlayed / 10) + 1
+        && d.createdAt == request.time
+        && d.updatedAt == request.time;
     }
 
-    // 새 기록이 기존 기록보다 나을 때만 갱신 허용(시도 적은 순 → 시간 짧은 순)
-    function isBetterScore(newD, oldD) {
-      return newD.attempts < oldD.attempts
-        || (newD.attempts == oldD.attempts && newD.timeMs < oldD.timeMs);
+    // 참여 1회당 totalPlayed+1, 승리 시에만 totalWon+1(증분 0 또는 1). 닉네임 불변.
+    function isValidPlayerUpdate(d, old) {
+      return d.keys().hasAll(['nickname', 'uid', 'totalPlayed', 'totalWon', 'accuracyBp', 'level', 'createdAt', 'updatedAt'])
+        && d.nickname == old.nickname
+        && d.uid is string && d.uid == request.auth.uid
+        && d.totalPlayed is int && d.totalPlayed == old.totalPlayed + 1
+        && d.totalWon is int && (d.totalWon == old.totalWon || d.totalWon == old.totalWon + 1)
+        && d.accuracyBp is int && d.accuracyBp >= 0 && d.accuracyBp <= 10000
+        && d.accuracyBp == int(d.totalWon * 10000 / d.totalPlayed)
+        && d.level is int && d.level == int(d.totalPlayed / 10) + 1
+        && d.createdAt == old.createdAt
+        && d.updatedAt == request.time;
     }
 
     // 데일리 챌린지 랭킹 — 문서 ID가 `날짜__닉네임` 이라 update 금지로 하루 1회 강제
@@ -51,16 +61,16 @@ service cloud.firestore {
     }
 
     function isValidDaily(d) {
-      return d.keys().hasAll(['nickname', 'dateKey', 'attempts', 'timeMs', 'uid', 'createdAt'])
+      return d.keys().hasAll(['nickname', 'dateKey', 'attempts', 'uid', 'createdAt', 'schemaVersion'])
         && d.nickname is string
         && d.nickname.size() >= 1 && d.nickname.size() <= 12
         && d.dateKey is string && d.dateKey.size() == 10
         && d.attempts is int && d.attempts >= 1 && d.attempts <= 6
-        && d.timeMs is int && d.timeMs >= 0
-        && d.uid is string && d.uid == request.auth.uid;
+        && d.uid is string && d.uid == request.auth.uid
+        && d.schemaVersion is int && d.schemaVersion == 2;
     }
 
-    // 그 외 모든 경로 접근 금지
+    // 그 외 모든 경로(구 rankings 컬렉션 포함) 접근 금지
     match /{document=**} {
       allow read, write: if false;
     }

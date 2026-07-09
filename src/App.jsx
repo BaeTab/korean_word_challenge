@@ -13,9 +13,10 @@ import ConfettiBurst from './components/ConfettiBurst'
 import IntroScreen from './components/IntroScreen'
 import Stats from './components/Stats'
 import { useWordleGame } from './hooks/useWordleGame'
-import { submitScore, submitDailyScore } from './services/ranking'
+import { submitDailyScore } from './services/ranking'
+import { recordParticipation, getPlayerStats } from './services/players'
 import { isValidGuess, preloadGuessDict } from './constants/words'
-import { formatTime, stageLabel } from './utils/format'
+import { stageLabel } from './utils/format'
 import { buildShareText, shareResult } from './utils/share'
 import { getDailyKey } from './utils/daily'
 import { loadStats, recordResult } from './utils/stats'
@@ -32,16 +33,16 @@ function readSavedDaily(key) {
   }
 }
 
-// 랭킹 시스템 개편 공지 — 버전 문자열을 바꾸면 다시 한 번 노출된다.
-const RANKING_NOTICE_KEY = 'notice-ranking-revamp-v1'
+// 레벨 시스템 개편 공지 — 버전 문자열을 바꾸면 다시 한 번 노출된다.
+const NOTICE_KEY = 'notice-level-system-v1'
 
 export default function App() {
   const game = useWordleGame()
   const {
     started, isDaily, dailyKey, slots, stage, status, keyStates, attempts, maxRows, grid, evaluations,
-    elapsedMs, current, currentLength, answer, hintUsed, penaltyMs,
+    current, currentLength, answer, hintUsed,
     begin, beginDaily, pressKey, pressDelete, clearCurrent, useHint, pressEnter,
-    startChallenge, retrySameMode, restart, exitToIntro,
+    retrySameMode, exitToIntro,
   } = game
 
   const [nickname, setNickname] = useState('')
@@ -54,6 +55,7 @@ export default function App() {
   const [noticeOpen, setNoticeOpen] = useState(false)
   const [regState, setRegState] = useState('idle') // idle|submitting|done|already|error
   const [stats, setStats] = useState(loadStats)
+  const [playerStats, setPlayerStats] = useState(null) // { totalPlayed, totalWon, accuracyBp, level }
   const prevStatus = useRef('playing')
   const toastTimer = useRef(null)
   const regParams = useRef(null) // 자동 등록에 쓸 이번 판 성적
@@ -63,12 +65,12 @@ export default function App() {
     preloadGuessDict()
   }, [])
 
-  // 랭킹 시스템 개편 공지 — 접속 시 한 번만 노출
+  // 레벨 시스템 개편 공지 — 접속 시 한 번만 노출
   useEffect(() => {
     try {
-      if (!localStorage.getItem(RANKING_NOTICE_KEY)) {
+      if (!localStorage.getItem(NOTICE_KEY)) {
         setNoticeOpen(true)
-        localStorage.setItem(RANKING_NOTICE_KEY, '1')
+        localStorage.setItem(NOTICE_KEY, '1')
       }
     } catch { /* noop */ }
   }, [])
@@ -80,30 +82,21 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(''), 1500)
   }, [])
 
-  // 랭킹 자동 등록 (regParams.current 기준). 실패 시 재시도 버튼에서도 호출.
+  // 데일리 랭킹 자동 등록 (regParams.current 기준). 실패 시 재시도 버튼에서도 호출.
   const autoRegister = useCallback(async () => {
     const p = regParams.current
     if (!p) return
     setRegState('submitting')
     try {
-      if (p.isDaily) {
-        const id = await submitDailyScore({
-          nickname: p.nickname, dateKey: p.dailyKey, attempts: p.attempts, timeMs: p.timeMs,
-        })
-        setSubmittedId(id)
-        setDailyDone(true)
-        setRegState('done')
-        showToast('데일리 랭킹 자동 등록! 🏆')
-      } else {
-        const ref = await submitScore({
-          nickname: p.nickname, stage: p.stage, attempts: p.attempts, timeMs: p.timeMs,
-        })
-        setSubmittedId(ref.id)
-        setRegState('done')
-        showToast('랭킹 자동 등록 완료! 🏆')
-      }
+      const id = await submitDailyScore({
+        nickname: p.nickname, dateKey: p.dailyKey, attempts: p.attempts,
+      })
+      setSubmittedId(id)
+      setDailyDone(true)
+      setRegState('done')
+      showToast('데일리 랭킹 자동 등록! 🏆')
     } catch (e) {
-      if (p.isDaily && e?.code === 'permission-denied') {
+      if (e?.code === 'permission-denied') {
         setDailyDone(true)
         setRegState('already')
       } else {
@@ -114,7 +107,8 @@ export default function App() {
     }
   }, [showToast])
 
-  // 승패 전환 시: 통계 기록 + (데일리면) 참여 잠금 저장 + 승리 시 자동 등록 + 결과 모달 오픈
+  // 승패 전환 시: 통계 기록 + (데일리면) 참여 잠금 저장 + 승리 시 데일리 랭킹 자동 등록
+  //  + 레벨 프로필 갱신(승패 무관, 모든 모드에서 참여로 집계) + 결과 모달 오픈
   useEffect(() => {
     if (prevStatus.current === 'playing' && status !== 'playing') {
       const won = status === 'won'
@@ -123,19 +117,27 @@ export default function App() {
         try {
           localStorage.setItem(
             `daily-done-${dailyKey}`,
-            JSON.stringify({ won, attempts, timeMs: elapsedMs, evaluations, dateKey: dailyKey }),
+            JSON.stringify({ won, attempts, evaluations, dateKey: dailyKey }),
           )
         } catch { /* noop */ }
         setDailyDone(true)
       }
-      if (won) {
-        regParams.current = {
-          nickname, isDaily, dailyKey, stage, attempts, timeMs: elapsedMs + penaltyMs,
-        }
+      if (won && isDaily) {
+        regParams.current = { nickname, dailyKey, attempts }
         autoRegister()
       } else {
         setRegState('idle')
       }
+      const prevLevel = playerStats?.level ?? 1
+      recordParticipation({ nickname, won })
+        .then((next) => {
+          if (next.level > prevLevel) showToast(`🎉 레벨업! Lv.${next.level}`)
+          setPlayerStats(next)
+        })
+        .catch((e) => {
+          // eslint-disable-next-line no-console
+          console.error('[recordParticipation] 실패:', e)
+        })
       const delay = slots * 180 + 600
       const t = setTimeout(() => setResultOpen(true), delay)
       prevStatus.current = status
@@ -166,20 +168,21 @@ export default function App() {
     pressEnter()
   }, [status, currentLength, slots, attempts, current, pressEnter, clearCurrent, showToast])
 
-  const handleStart = (nick, mode) => {
+  const handleStart = (nick, mode, pickedSlots = 5) => {
     setNickname(nick)
     setSubmittedId(null)
+    getPlayerStats(nick).then(setPlayerStats).catch(() => {})
     if (mode === 'daily') {
       const key = getDailyKey()
       setDailyDone(!!localStorage.getItem(`daily-done-${key}`))
       beginDaily(key)
     } else {
-      begin()
+      begin(pickedSlots)
     }
   }
   const handleShare = async () => {
     const text = buildShareText({
-      stage, attempts, maxRows, timeMs: elapsedMs, evaluations,
+      stage, attempts, maxRows, evaluations,
       won: status === 'won', dailyKey: isDaily ? dailyKey : undefined,
     })
     const r = await shareResult(text)
@@ -189,7 +192,7 @@ export default function App() {
   }
   const shareSaved = async (saved) => {
     const text = buildShareText({
-      stage: 1, attempts: saved.attempts, maxRows, timeMs: saved.timeMs,
+      stage: 1, attempts: saved.attempts, maxRows,
       evaluations: saved.evaluations || [], won: saved.won, dailyKey: saved.dateKey,
     })
     const r = await shareResult(text)
@@ -197,14 +200,11 @@ export default function App() {
     else if (r === 'shared') showToast('공유 완료! 🎉')
     else if (r === 'fail') showToast('복사에 실패했어요 😢')
   }
-  const goChallenge = () => { setResultOpen(false); setSubmittedId(null); startChallenge() }
   const goRetry = () => { setResultOpen(false); setSubmittedId(null); retrySameMode() }
-  const goRestart = () => { setResultOpen(false); setSubmittedId(null); restart() }
   const goIntro = () => { setResultOpen(false); setSubmittedId(null); exitToIntro() }
 
   const isWon = status === 'won'
   const isLost = status === 'lost'
-  const canChallenge = isWon && stage === 1 && !isDaily
   const mascotMood = isWon ? 'happy' : isLost ? 'sad' : 'idle'
   const winRow = isWon ? attempts - 1 : -1
 
@@ -235,7 +235,6 @@ export default function App() {
               <div className={styles.resultStats}>
                 <span>{savedDaily.won ? '✅ 성공' : '❌ 실패'}</span>
                 {savedDaily.won && <span>🎯 {savedDaily.attempts}번</span>}
-                {savedDaily.won && <span>⏱ {formatTime(savedDaily.timeMs)}</span>}
               </div>
             )}
             {savedDaily?.evaluations?.length > 0 && (
@@ -259,12 +258,14 @@ export default function App() {
         >
           <div className={styles.result}>
             <Mascot mood="happy" size={72} />
-            <h2 className={styles.resultTitle}>랭킹 시스템이 개편됐어요 📢</h2>
+            <h2 className={styles.resultTitle}>랭킹이 레벨 시스템으로 바뀌었어요 🆙</h2>
             <p className={styles.resultDesc}>
-              이제 랭킹은 <b className={styles.answerWord}>매주 월요일 00시</b>에 초기화돼요.
+              이제 <b className={styles.answerWord}>시간 제한이 없어요</b> — 편하게 풀어보세요.
               <br />
-              같은 사람이 여러 번 등록해도 쌓이지 않고,{' '}
-              <b className={styles.answerWord}>가장 잘한 기록 1개만</b> 랭킹에 남아요.
+              <b className={styles.answerWord}>참여할수록 레벨업</b>, <b className={styles.answerWord}>정답률</b>로
+              등급이 매겨지는 영구 랭킹으로 바뀌었고, 기존 주간 랭킹은 초기화됐어요.
+              <br />
+              새로운 <b className={styles.answerWord}>7칸 마스터 모드</b>도 추가됐어요!
             </p>
             <button
               className={styles.btn}
@@ -308,8 +309,8 @@ export default function App() {
             <span className={styles.statValue}>{attempts}/{maxRows}</span>
           </div>
           <div className={styles.statBox}>
-            <span className={styles.statLabel}>TIME</span>
-            <span className={styles.statValue}>{formatTime(elapsedMs)}</span>
+            <span className={styles.statLabel}>LEVEL</span>
+            <span className={styles.statValue}>Lv.{playerStats?.level ?? 1}</span>
           </div>
         </div>
       </header>
@@ -327,13 +328,10 @@ export default function App() {
               className={styles.hintBtn}
               onClick={useHint}
               disabled={status !== 'playing' || hintUsed || currentLength >= slots}
-              title="다음 칸의 정답 자모를 1개 알려줘요 (스테이지당 1회 · +30초)"
+              title="다음 칸의 정답 자모를 1개 알려줘요 (스테이지당 1회)"
             >
-              💡 힌트 {hintUsed ? '사용함' : '(−30초)'}
+              💡 힌트 {hintUsed ? '사용함' : ''}
             </button>
-            {penaltyMs > 0 && (
-              <span className={styles.penalty}>페널티 +{Math.round(penaltyMs / 1000)}초</span>
-            )}
           </div>
 
           <Keyboard
@@ -373,7 +371,6 @@ export default function App() {
               </p>
               <div className={styles.resultStats}>
                 <span>🎯 {attempts}번 시도</span>
-                <span>⏱ {formatTime(elapsedMs)}</span>
                 <span>🏅 {isDaily ? `데일리 #${dailyKey}` : stageLabel(stage)}</span>
               </div>
             </>
@@ -389,14 +386,8 @@ export default function App() {
           )}
 
           <div className={styles.resultBtns}>
-            {canChallenge && (
-              <button className={`${styles.btn} ${styles.btnHot}`} onClick={goChallenge}>
-                🔥 6칸 챌린지 도전!
-              </button>
-            )}
-
-            {/* 승리 시 랭킹 자동 등록 상태 */}
-            {isWon && (
+            {/* 데일리 승리 시 랭킹 자동 등록 상태 */}
+            {isWon && isDaily && (
               <div className={`${styles.regStatus} ${styles['reg_' + regState] || ''}`}>
                 {regState === 'submitting' && '랭킹 등록 중… ⏳'}
                 {regState === 'done' && '🏆 랭킹에 자동 등록됐어요!'}
@@ -419,7 +410,6 @@ export default function App() {
             ) : (
               <>
                 <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRetry}>🔄 같은 모드 다시</button>
-                <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goRestart}>↩ 처음부터</button>
                 <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goIntro}>🏠 홈으로</button>
               </>
             )}
@@ -432,7 +422,7 @@ export default function App() {
           <div className={styles.resultRanking}>
             {isDaily
               ? <DailyBoard dateKey={dailyKey} highlightId={submittedId} compact />
-              : <Leaderboard highlightId={submittedId} compact />}
+              : <Leaderboard highlightId={nickname} compact />}
           </div>
         </div>
       </Modal>

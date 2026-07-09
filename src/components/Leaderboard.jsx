@@ -1,82 +1,43 @@
 // -----------------------------------------------------------------------------
-// Leaderboard — 실시간 랭킹 보드 (6칸 챌린지 / 5칸 기본 분리)
+// Leaderboard — 실시간 레벨 랭킹 보드 (참여횟수·정답률 기반, 영구 누적)
 //  - Firestore onSnapshot 구독으로 실시간 갱신
-//  - 스테이지별로 나눠 각각 Top N 표시(닉네임당 최고기록 1개)
-//  - highlightId: 방금 등록한 내 문서 강조
-//  - 매주 월요일 00시(KST) 초기화 + 다음 초기화까지 카운트다운
+//  - 정렬: 레벨 desc → 정답률 desc → 참여횟수 desc
+//  - highlightId: 내 닉네임 강조
 // -----------------------------------------------------------------------------
 import { useEffect, useState } from 'react'
-import { subscribeTopRanking } from '../services/ranking'
-import { formatTime, rankBadge } from '../utils/format'
-import { msUntilNextWeekReset, formatWeekCountdown } from '../utils/week'
+import { subscribeTopPlayers } from '../services/players'
+import { rankBadge } from '../utils/format'
+import { levelTitle, accuracyTier } from '../utils/level'
 import styles from '../styles/Leaderboard.module.css'
 
-const PER_STAGE = 8
-
-function StageList({ title, icon, rows, highlightId, accent }) {
-  return (
-    <div className={styles.section}>
-      <h3 className={`${styles.sectionTitle} ${accent ? styles.accent : ''}`}>
-        {icon} {title}
-      </h3>
-      {rows.length === 0 ? (
-        <p className={styles.empty}>아직 기록이 없어요 — 첫 주인공이 되어보세요!</p>
-      ) : (
-        <ol className={styles.list}>
-          {rows.map((row, i) => (
-            <li
-              key={row.id}
-              className={`${styles.item} ${row.id === highlightId ? styles.mine : ''} ${i < 3 ? styles.top3 : ''}`}
-            >
-              <span className={styles.rank}>{rankBadge(i)}</span>
-              <span className={styles.nick} title={row.nickname}>{row.nickname}</span>
-              <span className={styles.stat}>{row.attempts}회</span>
-              <span className={styles.stat}>{formatTime(row.timeMs)}</span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
-  )
-}
+const TOP_N = 30
 
 export default function Leaderboard({ highlightId, compact = false }) {
   const [rows, setRows] = useState([])
   const [status, setStatus] = useState('loading') // loading | ready | error
-  const [countdown, setCountdown] = useState(msUntilNextWeekReset())
 
   useEffect(() => {
-    const unsub = subscribeTopRanking(
+    const unsub = subscribeTopPlayers(
       (data) => {
         setRows(data)
         setStatus('ready')
       },
       () => setStatus('error'),
-      100,
+      TOP_N,
     )
     return () => unsub()
   }, [])
-
-  useEffect(() => {
-    const id = setInterval(() => setCountdown(msUntilNextWeekReset()), 1000)
-    return () => clearInterval(id)
-  }, [])
-
-  const stage6 = rows.filter((r) => r.stage >= 2).slice(0, PER_STAGE)
-  const stage5 = rows.filter((r) => r.stage < 2).slice(0, PER_STAGE)
 
   return (
     <section className={`${styles.wrap} ${compact ? styles.compact : ''}`} aria-label="랭킹 보드">
       <header className={styles.head}>
         <h2 className={styles.title}>
-          <span className={styles.prompt}>$</span> ranking --top
+          <span className={styles.prompt}>$</span> ranking --level
         </h2>
         <span className={styles.live}>
           <i className={styles.dot} /> LIVE
         </span>
       </header>
-
-      <p className={styles.countdown}>다음 초기화까지 ⏳ <b>{formatWeekCountdown(countdown)}</b></p>
 
       {status === 'loading' && (
         <p className={styles.hint}>랭킹 불러오는 중… <span className={styles.blink}>▍</span></p>
@@ -90,22 +51,30 @@ export default function Leaderboard({ highlightId, compact = false }) {
         </p>
       )}
 
-      {status === 'ready' && (
-        <div className={styles.stages}>
-          <StageList
-            title="6칸 챌린지"
-            icon="🔥"
-            rows={stage6}
-            highlightId={highlightId}
-            accent
-          />
-          <StageList
-            title="5칸 기본"
-            icon="⭐"
-            rows={stage5}
-            highlightId={highlightId}
-          />
-        </div>
+      {status === 'ready' && rows.length === 0 && (
+        <p className={styles.empty}>아직 기록이 없어요 — 첫 주인공이 되어보세요!</p>
+      )}
+
+      {status === 'ready' && rows.length > 0 && (
+        <ol className={styles.list}>
+          {rows.map((row, i) => {
+            const tier = accuracyTier(row.totalPlayed, row.accuracyBp)
+            return (
+              <li
+                key={row.id}
+                className={`${styles.item} ${row.id === highlightId ? styles.mine : ''} ${i < 3 ? styles.top3 : ''}`}
+              >
+                <span className={styles.rank}>{rankBadge(i)}</span>
+                <span className={styles.nick} title={row.nickname}>{row.nickname}</span>
+                <span className={styles.badge}>Lv.{row.level} {levelTitle(row.level)}</span>
+                <span className={styles.stat}>
+                  {tier.emoji} {tier.percent != null ? `${tier.percent}%` : tier.name}
+                </span>
+                <span className={styles.stat}>{row.totalPlayed}판</span>
+              </li>
+            )
+          })}
+        </ol>
       )}
     </section>
   )

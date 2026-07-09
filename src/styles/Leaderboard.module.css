@@ -64,7 +64,7 @@
 }
 .item {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -75,20 +75,6 @@
   animation: slidein 0.3s ease both;
 }
 
-/* 스테이지 분리 섹션 */
-.stages { display: flex; flex-direction: column; gap: 16px; }
-.section { display: flex; flex-direction: column; gap: 6px; }
-.sectionTitle {
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-  font-weight: 800;
-  color: var(--text);
-  margin: 2px 0 4px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.sectionTitle.accent { color: var(--pink); }
 .empty {
   font-size: 0.78rem;
   color: var(--text-dim);

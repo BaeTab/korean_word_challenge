@@ -1,22 +1,22 @@
 {
   "indexes": [
     {
-      "collectionGroup": "rankings",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "weekKey", "order": "ASCENDING" },
-        { "fieldPath": "stage", "order": "DESCENDING" },
-        { "fieldPath": "attempts", "order": "ASCENDING" },
-        { "fieldPath": "timeMs", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "daily",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "dateKey", "order": "ASCENDING" },
+        { "fieldPath": "schemaVersion", "order": "ASCENDING" },
         { "fieldPath": "attempts", "order": "ASCENDING" },
-        { "fieldPath": "timeMs", "order": "ASCENDING" }
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "players",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "level", "order": "DESCENDING" },
+        { "fieldPath": "accuracyBp", "order": "DESCENDING" },
+        { "fieldPath": "totalPlayed", "order": "DESCENDING" }
       ]
     }
   ],

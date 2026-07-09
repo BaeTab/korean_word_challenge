@@ -1,11 +1,10 @@
 // -----------------------------------------------------------------------------
 // useWordleGame — 자모 워들 게임 상태/규칙 훅
-//  - 5칸(기본) ↔ 6칸(챌린지) 모드 전환
+//  - 5칸/6칸/7칸 모드(인트로에서 직접 선택, 체인 없음)
 //  - 입력/삭제/제출, 판정, 키보드 상태 병합
-//  - 타이머(최초 시작 시점부터 누적 → 클리어까지 걸린 시간)
-//  - bestResult: 등록 가능한 최고 성적 { stage, attempts, timeMs }
+//  - 시간요소 없음: 시도 횟수만으로 승패를 가른다.
 // -----------------------------------------------------------------------------
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   decomposeWord,
   evaluateGuess,
@@ -16,7 +15,6 @@ import { obfuscate, deobfuscate } from '../utils/secret'
 import { pickRandomWord, pickDailyWord } from '../constants/words'
 
 export const MAX_ROWS = 6
-export const HINT_PENALTY_MS = 30000 // 힌트 1회당 시간 페널티(+30초)
 
 /**
  * 새 게임 상태 생성.
@@ -27,14 +25,13 @@ function freshGame(slots, exclude, opts = {}) {
   const answer = opts.fixedWord || pickRandomWord(slots, exclude)
   return {
     slots,
-    stage: slots === 6 ? 2 : 1,
+    stage: slots === 7 ? 3 : slots === 6 ? 2 : 1,
     answerEnc: obfuscate(answer), // 정답은 암호화 상태로만 저장
     guesses: [], // [{ jamo:string[], evaluation:string[] }]
     current: [], // 진행 중인 행의 자모 배열
     keyStates: {}, // jamo -> 'correct'|'present'|'absent'
     status: 'playing', // 'playing' | 'won' | 'lost'
     hintUsed: false, // 스테이지당 힌트 1회
-    penaltyMs: 0, // 힌트 사용 누적 페널티
     isDaily: !!opts.daily, // 데일리 챌린지 여부
     dailyKey: opts.dailyKey || null, // 'YYYY-MM-DD'
   }
@@ -42,20 +39,7 @@ function freshGame(slots, exclude, opts = {}) {
 
 export function useWordleGame() {
   const [game, setGame] = useState(() => freshGame(5))
-  const [bestResult, setBestResult] = useState(null) // { stage, attempts, timeMs }
   const [started, setStarted] = useState(false) // 인트로(닉네임)에서 시작 버튼을 눌러야 true
-
-  // 타이머: begin() 시점(startRef)부터 누적. 시작 전엔 0.
-  const startRef = useRef(Date.now())
-  const [now, setNow] = useState(Date.now())
-
-  useEffect(() => {
-    if (!started || game.status !== 'playing') return
-    const id = setInterval(() => setNow(Date.now()), 200)
-    return () => clearInterval(id)
-  }, [started, game.status])
-
-  const elapsedMs = started ? Math.max(0, now - startRef.current) : 0
 
   // ---- 입력 액션 ----------------------------------------------------------
   const pressKey = useCallback((jamo) => {
@@ -79,7 +63,7 @@ export function useWordleGame() {
     setGame((g) => (g.status !== 'playing' || g.current.length === 0 ? g : { ...g, current: [] }))
   }, [])
 
-  /** 힌트: 다음 빈 칸의 정답 자모 1개를 채워준다. 스테이지당 1회, +30초 페널티. */
+  /** 힌트: 다음 빈 칸의 정답 자모 1개를 채워준다. 스테이지당 1회, 페널티 없음. */
   const useHint = useCallback(() => {
     setGame((g) => {
       if (g.status !== 'playing' || g.hintUsed) return g
@@ -90,7 +74,6 @@ export function useWordleGame() {
         ...g,
         current: [...g.current, answerJamo[pos]],
         hintUsed: true,
-        penaltyMs: g.penaltyMs + HINT_PENALTY_MS,
       }
     })
   }, [])
@@ -109,26 +92,6 @@ export function useWordleGame() {
       const lost = !won && guesses.length >= MAX_ROWS
       const status = won ? 'won' : lost ? 'lost' : 'playing'
 
-      // 클리어 시 성적 기록. 시간은 스테이지별 독립(타이머는 스테이지 시작 때 리셋됨).
-      if (won) {
-        const result = {
-          stage: g.stage,
-          attempts: guesses.length,
-          timeMs: Math.max(0, Date.now() - startRef.current) + g.penaltyMs,
-        }
-        setBestResult((prev) => {
-          if (!prev) return result
-          if (g.stage > prev.stage) return result // 더 높은 스테이지 우선
-          if (g.stage === prev.stage) {
-            const better =
-              result.attempts < prev.attempts ||
-              (result.attempts === prev.attempts && result.timeMs < prev.timeMs)
-            return better ? result : prev
-          }
-          return prev
-        })
-      }
-
       return { ...g, guesses, current: [], keyStates, status }
     })
   }, [])
@@ -137,51 +100,27 @@ export function useWordleGame() {
   const prevAnswer = (g) => (g.answerEnc ? deobfuscate(g.answerEnc) : undefined)
 
   // ---- 게임 흐름 ----------------------------------------------------------
-  /** 인트로(닉네임)에서 '시작'을 눌러 게임을 개시. 타이머 시작. */
-  const begin = useCallback(() => {
-    startRef.current = Date.now()
-    setNow(Date.now())
-    setBestResult(null)
+  /** 인트로(닉네임)에서 '시작'을 눌러 게임을 개시. */
+  const begin = useCallback((slots = 5) => {
     setStarted(true)
-    setGame((g) => freshGame(5, prevAnswer(g)))
+    setGame((g) => freshGame(slots, prevAnswer(g)))
   }, [])
 
   /** 데일리 챌린지 시작 — 날짜 기준 고정 단어(5칸), 챌린지 진행 없음. */
   const beginDaily = useCallback((dateKey) => {
-    startRef.current = Date.now()
-    setNow(Date.now())
-    setBestResult(null)
     setStarted(true)
     setGame(() =>
       freshGame(5, undefined, { fixedWord: pickDailyWord(dateKey), daily: true, dailyKey: dateKey }),
     )
   }, [])
 
-  /** 5글자 클리어 후 6글자 챌린지로 진입. 시간은 스테이지별로 독립 측정(타이머 리셋). */
-  const startChallenge = useCallback(() => {
-    startRef.current = Date.now()
-    setNow(Date.now())
-    setGame((g) => freshGame(6, prevAnswer(g)))
-  }, [])
-
-  /** 전체 재시작 (기본 5글자, 타이머·성적 초기화). */
-  const restart = useCallback(() => {
-    startRef.current = Date.now()
-    setNow(Date.now())
-    setBestResult(null)
-    setGame((g) => freshGame(5, prevAnswer(g)))
-  }, [])
-
   /** 인트로(모드 선택) 화면으로 돌아간다. */
   const exitToIntro = useCallback(() => {
     setStarted(false)
-    setBestResult(null)
   }, [])
 
-  /** 같은 모드로 다시 (새 단어, 타이머 리셋). 데일리면 같은 오늘의 단어로 재도전. */
+  /** 같은 모드로 다시 (새 단어). 데일리면 같은 오늘의 단어로 재도전. */
   const retrySameMode = useCallback(() => {
-    startRef.current = Date.now()
-    setNow(Date.now())
     setGame((g) =>
       g.isDaily
         ? freshGame(5, undefined, { fixedWord: pickDailyWord(g.dailyKey), daily: true, dailyKey: g.dailyKey })
@@ -230,10 +169,7 @@ export function useWordleGame() {
     maxRows: MAX_ROWS,
     grid,
     evaluations: game.guesses.map((g) => g.evaluation), // 제출된 행별 판정(공유용)
-    elapsedMs,
-    penaltyMs: game.penaltyMs,
     hintUsed: game.hintUsed,
-    bestResult,
     // 액션
     begin,
     beginDaily,
@@ -242,9 +178,7 @@ export function useWordleGame() {
     clearCurrent,
     useHint,
     pressEnter,
-    startChallenge,
     retrySameMode,
-    restart,
     exitToIntro,
   }
 }

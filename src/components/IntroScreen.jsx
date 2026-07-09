@@ -12,10 +12,17 @@ import { getDailyKey } from '../utils/daily'
 import { winRate } from '../utils/stats'
 import styles from '../styles/Intro.module.css'
 
+const SLOT_OPTIONS = [
+  { slots: 5, label: '5칸 · 기본' },
+  { slots: 6, label: '6칸 · 챌린지' },
+  { slots: 7, label: '7칸 · 마스터' },
+]
+
 export default function IntroScreen({ onStart, onViewDaily, stats, defaultNick = '' }) {
   const [nick, setNick] = useState(defaultNick)
   const [error, setError] = useState('')
   const [showStats, setShowStats] = useState(false)
+  const [slots, setSlots] = useState(5)
 
   const dailyKey = getDailyKey()
   const dailyDoneHere =
@@ -28,7 +35,7 @@ export default function IntroScreen({ onStart, onViewDaily, stats, defaultNick =
       return
     }
     setError('')
-    onStart(v.slice(0, 12), mode)
+    onStart(v.slice(0, 12), mode, slots)
   }
   const onDaily = () => {
     // 이미 오늘 참여했으면 랭킹 열람만
@@ -81,6 +88,18 @@ export default function IntroScreen({ onStart, onViewDaily, stats, defaultNick =
                 autoFocus
               />
               {error && <p className={styles.error}>{error}</p>}
+              <div className={styles.slotPicker}>
+                {SLOT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.slots}
+                    type="button"
+                    className={`${styles.slotBtn} ${slots === opt.slots ? styles.slotBtnActive : ''}`}
+                    onClick={() => setSlots(opt.slots)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <div className={styles.modeBtns}>
                 <button type="submit" className={styles.startBtn}>
                   🎮 자유 플레이
@@ -97,7 +116,8 @@ export default function IntroScreen({ onStart, onViewDaily, stats, defaultNick =
               <p className={styles.modeHint}>
                 {dailyDoneHere
                   ? '오늘의 챌린지는 이미 참여 완료 — 랭킹만 볼 수 있어요 🌙'
-                  : <>오늘의 챌린지는 <b>모두 같은 단어</b> · <b>닉네임당 하루 1회</b></>}
+                  : <>오늘의 챌린지는 <b>모두 같은 단어(5칸)</b> · <b>닉네임당 하루 1회</b></>}
+                {slots === 7 && <><br />7칸 모드는 큐레이션된 <b>42개 후보 단어</b> 기반이에요</>}
               </p>
             </form>
 

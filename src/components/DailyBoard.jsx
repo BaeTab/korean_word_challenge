@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------------
 import { useEffect, useState } from 'react'
 import { subscribeDailyRanking } from '../services/ranking'
-import { formatTime, rankBadge } from '../utils/format'
+import { rankBadge } from '../utils/format'
 import { msUntilNextKstMidnight, formatCountdown } from '../utils/daily'
 import styles from '../styles/Leaderboard.module.css'
 
@@ -53,7 +53,6 @@ export default function DailyBoard({ dateKey, highlightId, compact = false }) {
               <span className={styles.rank}>{rankBadge(i)}</span>
               <span className={styles.nick} title={row.nickname}>{row.nickname}</span>
               <span className={styles.stat}>{row.attempts}회</span>
-              <span className={styles.stat}>{formatTime(row.timeMs)}</span>
             </li>
           ))}
         </ol>
