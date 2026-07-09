@@ -1,0 +1,55 @@
+/* ===== 상점 ===== */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+.balance {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--text);
+}
+.balance b { color: var(--amber); }
+.error { margin: 0; color: var(--pink); font-size: 0.82rem; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.itemName {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.buyBtn {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--green), var(--green-soft));
+  color: #04241a;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.8rem;
+  transition: transform 0.15s var(--ease-bounce), opacity 0.2s;
+}
+.buyBtn:hover:not(:disabled) { transform: translateY(-2px); }
+.buyBtn:disabled {
+  opacity: 0.6;
+  background: var(--panel);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}

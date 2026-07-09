@@ -19,7 +19,7 @@ export const MAX_ROWS = 6
 /**
  * 새 게임 상태 생성.
  * 정답은 평문으로 두지 않고 answerEnc(난독화)만 보관한다. (anti-peek)
- * @param {object} [opts] { fixedWord, daily, dailyKey }
+ * @param {object} [opts] { fixedWord, daily, dailyKey, room, roomId }
  */
 function freshGame(slots, exclude, opts = {}) {
   const answer = opts.fixedWord || pickRandomWord(slots, exclude)
@@ -34,6 +34,8 @@ function freshGame(slots, exclude, opts = {}) {
     hintUsed: false, // 스테이지당 힌트 1회
     isDaily: !!opts.daily, // 데일리 챌린지 여부
     dailyKey: opts.dailyKey || null, // 'YYYY-MM-DD'
+    isRoom: !!opts.room, // 커스텀 방 여부(친구가 고른 단어 — XP/포인트 미지급)
+    roomId: opts.roomId || null,
   }
 }
 
@@ -114,12 +116,18 @@ export function useWordleGame() {
     )
   }, [])
 
+  /** 커스텀 방 시작 — 방장이 고른 단어로 진행. XP/포인트 미지급(freshGame의 room 플래그로 App에서 분기). */
+  const beginRoom = useCallback((roomId, word, slots) => {
+    setStarted(true)
+    setGame(() => freshGame(slots, undefined, { fixedWord: word, room: true, roomId }))
+  }, [])
+
   /** 인트로(모드 선택) 화면으로 돌아간다. */
   const exitToIntro = useCallback(() => {
     setStarted(false)
   }, [])
 
-  /** 같은 모드로 다시 (새 단어). 데일리면 같은 오늘의 단어로 재도전. */
+  /** 같은 모드로 다시 (새 단어). 데일리면 같은 오늘의 단어로 재도전. 방은 재도전 없음(홈으로만). */
   const retrySameMode = useCallback(() => {
     setGame((g) =>
       g.isDaily
@@ -158,6 +166,8 @@ export function useWordleGame() {
     started,
     isDaily: game.isDaily,
     dailyKey: game.dailyKey,
+    isRoom: game.isRoom,
+    roomId: game.roomId,
     slots: game.slots,
     stage: game.stage,
     answer,
@@ -173,6 +183,7 @@ export function useWordleGame() {
     // 액션
     begin,
     beginDaily,
+    beginRoom,
     pressKey,
     pressDelete,
     clearCurrent,

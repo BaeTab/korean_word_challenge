@@ -20,6 +20,16 @@ export function xpForGame({ slots, won }) {
   return participation + winBonus
 }
 
+/**
+ * 게임 1판 승리 시 상점 포인트 획득량(패배는 0). slots: 5|6|7.
+ * XP와 별도 재화 — xpForGame의 승리 XP(30/45/60)에 1:1 대응하는 값으로
+ * firestore.rules의 isValidPointsForXp가 xpDelta에서 그대로 파생한다.
+ */
+export function pointsForGame({ slots, won }) {
+  if (!won) return 0
+  return { 5: 1, 6: 2, 7: 3 }[slots || 5] ?? 1
+}
+
 /** 레벨 N에 도달하기 위한 누적 XP 임계값. */
 export function xpThreshold(level) {
   return 25 * level * (level - 1)

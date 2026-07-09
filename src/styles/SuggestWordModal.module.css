@@ -1,0 +1,50 @@
+/* ===== 단어 제안 폼 ===== */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+.title { margin: 4px 0 0; font-size: 1.2rem; color: var(--green); }
+.desc { margin: 0; font-size: 0.88rem; color: var(--text-dim); }
+.input {
+  width: 100%;
+  margin-top: 8px;
+  padding: 13px 15px;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 1.05rem;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.18);
+}
+.error { margin: 0; color: var(--pink); font-size: 0.82rem; }
+.btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 13px 18px;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.98rem;
+  color: #04241a;
+  background: linear-gradient(135deg, var(--green), var(--green-soft));
+  box-shadow: 0 10px 26px -10px rgba(61, 220, 151, 0.75);
+  transition: transform 0.15s var(--ease-bounce), opacity 0.2s;
+}
+.btn:hover:not(:disabled) { transform: translateY(-2px); }
+.btn:disabled { opacity: 0.6; }
+
+.btnGhost {
+  background: var(--panel-2);
+  color: var(--text);
+  box-shadow: none;
+  border: 1px solid var(--border);
+}

@@ -17,6 +17,15 @@
         { "fieldPath": "xp", "order": "DESCENDING" },
         { "fieldPath": "totalPlayed", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "roomAttempts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "roomId", "order": "ASCENDING" },
+        { "fieldPath": "attempts", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

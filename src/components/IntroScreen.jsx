@@ -18,7 +18,7 @@ const SLOT_OPTIONS = [
   { slots: 7, label: '7칸 · 마스터' },
 ]
 
-export default function IntroScreen({ onStart, onViewDaily, stats, defaultNick = '' }) {
+export default function IntroScreen({ onStart, onViewDaily, onCreateRoom, stats, defaultNick = '' }) {
   const [nick, setNick] = useState(defaultNick)
   const [error, setError] = useState('')
   const [showStats, setShowStats] = useState(false)
@@ -48,6 +48,15 @@ export default function IntroScreen({ onStart, onViewDaily, stats, defaultNick =
   const submit = (e) => {
     e.preventDefault()
     start('normal')
+  }
+  const openCreateRoom = () => {
+    const v = nick.trim()
+    if (v.length === 0) {
+      setError('닉네임을 입력해야 방을 만들 수 있어요!')
+      return
+    }
+    setError('')
+    onCreateRoom?.(v.slice(0, 12))
   }
 
   return (
@@ -119,6 +128,12 @@ export default function IntroScreen({ onStart, onViewDaily, stats, defaultNick =
                   : <>오늘의 챌린지는 <b>모두 같은 단어(5칸)</b> · <b>닉네임당 하루 1회</b></>}
                 {slots === 7 && <><br />7칸 모드는 큐레이션된 <b>42개 후보 단어</b> 기반이에요</>}
               </p>
+
+              {onCreateRoom && (
+                <button type="button" className={styles.roomBtn} onClick={openCreateRoom}>
+                  🔗 커스텀 방 만들기 — 친구와 같은 단어로 겨루기
+                </button>
+              )}
             </form>
 
             <ul className={styles.rules}>

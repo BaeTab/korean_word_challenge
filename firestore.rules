@@ -19,8 +19,15 @@ service cloud.firestore {
       allow create: if request.auth != null
         && isValidPlayerCreate(request.resource.data);
 
-      allow update: if request.auth != null
-        && isValidPlayerUpdate(request.resource.data, resource.data);
+      // 게임 결과 기록/출석 체크/상점 구매는 서로 다른 필드 집합만 건드리는
+      // "분기 디스패처" 구조. 각 분기는 자기 몫이 아닌 경제 관련 필드를 전부
+      // old 값으로 고정(pin)해야 한다 — 안 그러면 한 쓰기가 다른 분기의 필드를
+      // 몰래 함께 바꿀 수 있다.
+      allow update: if request.auth != null && (
+        isValidGameplayUpdate(request.resource.data, resource.data) ||
+        isValidCheckinUpdate(request.resource.data, resource.data) ||
+        isValidShopPurchase(request.resource.data, resource.data)
+      );
 
       allow delete: if false;
     }
@@ -35,6 +42,17 @@ service cloud.firestore {
         && d.xp < 25 * (d.level + 1) * d.level;
     }
 
+    // 상점 포인트 획득량은 pointsForGame(src/utils/level.js)과 반드시 일치해야 함:
+    //  패배: 0(모든 칸수)   승리: 5칸 1 · 6칸 2 · 7칸 3
+    // xpDelta가 이미 칸수×승패 신호를 1:1로 담고 있으므로(isValidXpLevel에서 검증됨)
+    // 새 클라이언트 입력을 추가로 신뢰하지 않고 xpDelta에서 그대로 파생한다.
+    function isValidPointsForXp(xpDelta, pointsDelta) {
+      return (xpDelta in [10, 15, 20] && pointsDelta == 0)
+        || (xpDelta == 30 && pointsDelta == 1)
+        || (xpDelta == 45 && pointsDelta == 2)
+        || (xpDelta == 60 && pointsDelta == 3);
+    }
+
     function isValidPlayerCreate(d) {
       return d.keys().hasAll(['nickname', 'uid', 'totalPlayed', 'totalWon', 'accuracyBp', 'xp', 'level', 'createdAt', 'updatedAt'])
         && d.nickname is string
@@ -45,14 +63,21 @@ service cloud.firestore {
         && d.accuracyBp is int && d.accuracyBp >= 0 && d.accuracyBp <= 10000
         && d.accuracyBp == int(d.totalWon * 10000 / d.totalPlayed)
         && isValidXpLevel(d, d.xp)
+        && isValidPointsForXp(d.xp, d.get('points', 0))
+        && d.get('ownedSkinCat', false) == false
+        && d.get('ownedSkinRobot', false) == false
+        && d.get('checkinStreak', 0) == 0
+        && !d.keys().hasAny(['lastCheckinDate'])
         && d.createdAt == request.time
         && d.updatedAt == request.time;
     }
 
     // 참여 1회당 totalPlayed+1, 승리 시에만 totalWon+1(증분 0 또는 1). 닉네임 불변.
     // old.get('xp',0): xp 필드 도입 이전(구버전) 문서도 0에서부터 자연스럽게 이어받도록 마이그레이션.
-    function isValidPlayerUpdate(d, old) {
+    // 출석 체크/상점 필드는 이 분기에서 절대 바뀌면 안 됨(포인트 적립 제외 — 고정).
+    function isValidGameplayUpdate(d, old) {
       let oldXp = old.get('xp', 0);
+      let oldPoints = old.get('points', 0);
       return d.keys().hasAll(['nickname', 'uid', 'totalPlayed', 'totalWon', 'accuracyBp', 'xp', 'level', 'createdAt', 'updatedAt'])
         && d.nickname == old.nickname
         && d.uid is string && d.uid == request.auth.uid
@@ -61,8 +86,71 @@ service cloud.firestore {
         && d.accuracyBp is int && d.accuracyBp >= 0 && d.accuracyBp <= 10000
         && d.accuracyBp == int(d.totalWon * 10000 / d.totalPlayed)
         && isValidXpLevel(d, d.xp - oldXp)
+        && isValidPointsForXp(d.xp - oldXp, d.get('points', 0) - oldPoints)
+        && d.get('ownedSkinCat', false) == old.get('ownedSkinCat', false)
+        && d.get('ownedSkinRobot', false) == old.get('ownedSkinRobot', false)
+        && d.get('lastCheckinDate', '') == old.get('lastCheckinDate', '')
+        && d.get('checkinStreak', 0) == old.get('checkinStreak', 0)
         && d.createdAt == old.createdAt
         && d.updatedAt == request.time;
+    }
+
+    // 출석 체크 — 게임 플레이와 무관하게 하루 1회 고정 XP(5) 지급.
+    // 주의: Cloud Functions 없이는 규칙만으로 "정확히 하루에 1번"을 완벽 증명할 수
+    // 없다(request.time을 KST 날짜 문자열로 변환/비교하는 표준 방법이 마땅치 않음).
+    // 그래서 lastCheckinDate가 "이전 값보다 사전식으로 커야 한다"는 단조증가 조건만으로
+    // 최소한 재사용(같은 날짜 재전송)과 되돌리기를 막는다 — 보상이 소액 고정 XP뿐이라
+    // 기존 xpForGame 검증(게임이 실제로 플레이됐는지는 증명 안 함)과 같은 수준의 신뢰 모델.
+    function isValidCheckinUpdate(d, old) {
+      let oldXp = old.get('xp', 0);
+      return d.nickname == old.nickname
+        && d.uid is string && d.uid == request.auth.uid
+        && d.totalPlayed == old.totalPlayed
+        && d.totalWon == old.totalWon
+        && d.accuracyBp == old.accuracyBp
+        && d.xp == oldXp + 5
+        && d.level is int && d.level >= 1
+        && 25 * d.level * (d.level - 1) <= d.xp
+        && d.xp < 25 * (d.level + 1) * d.level
+        && d.get('points', 0) == old.get('points', 0)
+        && d.get('ownedSkinCat', false) == old.get('ownedSkinCat', false)
+        && d.get('ownedSkinRobot', false) == old.get('ownedSkinRobot', false)
+        && d.lastCheckinDate is string
+        && d.lastCheckinDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.lastCheckinDate > old.get('lastCheckinDate', '')
+        && d.checkinStreak is int
+        && d.checkinStreak >= 1
+        && d.checkinStreak <= old.get('checkinStreak', 0) + 1
+        && d.createdAt == old.createdAt
+        && d.updatedAt == request.time;
+    }
+
+    // 상점 구매 — 코스메틱 스킨 1회성 unlock. 가격/필드는 src/constants/shop.js와 동일해야 함.
+    // 아이템별 전용 boolean 필드를 써서 "정확히 이 아이템만 구매됨"을 단순 비교로 증명한다
+    // (맵 필드였다면 "다른 키는 안 바뀜"을 증명하기 번거로움 — 카탈로그가 커지면
+    // players/{nick}/inventory/{itemId} 서브컬렉션(create-only)으로 전환 고려).
+    function isValidShopPurchase(d, old) {
+      let base = d.nickname == old.nickname
+        && d.uid is string && d.uid == request.auth.uid
+        && d.totalPlayed == old.totalPlayed
+        && d.totalWon == old.totalWon
+        && d.accuracyBp == old.accuracyBp
+        && d.xp == old.get('xp', 0)
+        && d.level == old.get('level', 1)
+        && d.get('lastCheckinDate', '') == old.get('lastCheckinDate', '')
+        && d.get('checkinStreak', 0) == old.get('checkinStreak', 0)
+        && d.createdAt == old.createdAt
+        && d.updatedAt == request.time;
+
+      let buyCat = d.points == old.get('points', 0) - 15 && d.points >= 0
+        && old.get('ownedSkinCat', false) == false && d.ownedSkinCat == true
+        && d.get('ownedSkinRobot', false) == old.get('ownedSkinRobot', false);
+
+      let buyRobot = d.points == old.get('points', 0) - 25 && d.points >= 0
+        && old.get('ownedSkinRobot', false) == false && d.ownedSkinRobot == true
+        && d.get('ownedSkinCat', false) == old.get('ownedSkinCat', false);
+
+      return base && (buyCat || buyRobot);
     }
 
     // 데일리 챌린지 랭킹 — 문서 ID가 `날짜__닉네임` 이라 update 금지로 하루 1회 강제
@@ -80,6 +168,68 @@ service cloud.firestore {
         && d.attempts is int && d.attempts >= 1 && d.attempts <= 6
         && d.uid is string && d.uid == request.auth.uid
         && d.schemaVersion is int && d.schemaVersion == 2;
+    }
+
+    // 유저 단어 제안 — 정답 풀은 빌드타임 정적 파일이라 자동 반영되지 않음.
+    // 개발자가 Firebase 콘솔에서 수동 검토 후 코드에 반영하는 큐 역할만 한다.
+    match /wordSuggestions/{id} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidSuggestion(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    function isValidSuggestion(d) {
+      return d.keys().hasOnly(['word', 'slots', 'nickname', 'uid', 'status', 'createdAt'])
+        && d.word is string
+        && d.word.matches('^[가-힣]{2,4}$')
+        && d.slots is int && d.slots in [5, 6, 7]
+        && d.nickname is string
+        && d.nickname.size() >= 1 && d.nickname.size() <= 12
+        && d.uid is string && d.uid == request.auth.uid
+        && d.status == 'pending'
+        && d.createdAt == request.time;
+    }
+
+    // 커스텀 방 — 방장이 고른 단어로 친구와 async 대결. players 경제와 완전히
+    // 분리(XP/포인트 미지급)해 규칙 위험을 낮게 유지한다(친구가 고른 단어는
+    // 난이도 가정이 깨지고, 레벨 시스템과 엮으려면 rooms 문서 교차검증이 필요해짐).
+    match /rooms/{roomId} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidRoom(roomId, request.resource.data);
+      allow update, delete: if false;
+    }
+
+    function isValidRoom(roomId, d) {
+      return d.keys().hasOnly(['roomId', 'slots', 'answerEnc', 'creatorNickname', 'creatorUid', 'createdAt', 'expiresAt'])
+        && d.roomId == roomId
+        && d.slots is int && d.slots in [5, 6, 7]
+        && d.answerEnc is string && d.answerEnc.size() >= 4 && d.answerEnc.size() <= 64
+        && d.creatorNickname is string
+        && d.creatorNickname.size() >= 1 && d.creatorNickname.size() <= 12
+        && d.creatorUid is string && d.creatorUid == request.auth.uid
+        && d.createdAt == request.time
+        // 만료는 대략 14일 뒤(클라이언트 시계와 서버 request.time 사이 오차를 감안해
+        // 정확히 일치가 아닌 13~15일 범위로 검증).
+        && d.expiresAt >= request.time + duration.value(13, 'd')
+        && d.expiresAt <= request.time + duration.value(15, 'd');
+    }
+
+    // 방 결과 제출 — daily와 동일한 create-only 패턴(문서ID 충돌로 재제출 차단).
+    match /roomAttempts/{id} {
+      allow read: if true;
+      allow create: if request.auth != null && isValidRoomAttempt(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    function isValidRoomAttempt(d) {
+      return d.keys().hasOnly(['roomId', 'nickname', 'attempts', 'won', 'uid', 'createdAt'])
+        && d.roomId is string && d.roomId.size() >= 6 && d.roomId.size() <= 8
+        && d.nickname is string
+        && d.nickname.size() >= 1 && d.nickname.size() <= 12
+        && d.attempts is int && d.attempts >= 1 && d.attempts <= 6
+        && d.won is bool
+        && d.uid is string && d.uid == request.auth.uid
+        && d.createdAt == request.time;
     }
 
     // 그 외 모든 경로(구 rankings 컬렉션 포함) 접근 금지

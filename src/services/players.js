@@ -22,7 +22,10 @@ import {
   serverTimestamp,
 } from 'firebase/firestore'
 import { db, ensureAnonymousAuth } from '../firebase'
-import { accuracyBpFrom, levelFromXp, xpForGame } from '../utils/level'
+import { accuracyBpFrom, levelFromXp, pointsForGame, xpForGame } from '../utils/level'
+import { CHECKIN_XP_BONUS, isConsecutiveDay } from '../utils/checkin'
+import { getDailyKey } from '../utils/daily'
+import { SHOP_ITEMS } from '../constants/shop'
 
 const COL = 'players'
 
@@ -42,6 +45,9 @@ export async function getPlayerStats(nickname) {
 
 /**
  * 게임 종료(승패 무관) 시 참여 기록. 익명 로그인 보장 후 트랜잭션으로 누적치를 갱신한다.
+ * 승리 시 상점 포인트도 함께 적립(pointsForGame). 기존 문서 갱신은 tx.update()로
+ * 변경 필드만 건드려 출석 체크/상점 필드(lastCheckinDate·checkinStreak·ownedSkinX)를
+ * 실수로 지우지 않는다(§0 필드 고정 원칙 — 신규 필드가 계속 생겨도 안전).
  * @param {{ nickname:string, won:boolean, slots:number }} p
  * @returns {Promise<object>} 갱신된 플레이어 문서
  */
@@ -51,23 +57,93 @@ export async function recordParticipation({ nickname, won, slots }) {
   const ref = doc(db, COL, nick)
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref)
-    const old = snap.exists() ? snap.data() : { totalPlayed: 0, totalWon: 0, xp: 0, createdAt: null }
+    const old = snap.exists() ? snap.data() : { totalPlayed: 0, totalWon: 0, xp: 0, points: 0 }
     const totalPlayed = old.totalPlayed + 1
     const totalWon = old.totalWon + (won ? 1 : 0)
     const xp = (old.xp || 0) + xpForGame({ slots, won })
+    const points = (old.points || 0) + pointsForGame({ slots, won })
+    const level = levelFromXp(xp)
+    const accuracyBp = accuracyBpFrom(totalWon, totalPlayed)
+
+    if (snap.exists()) {
+      const patch = { uid: user.uid, totalPlayed, totalWon, accuracyBp, xp, level, points, updatedAt: serverTimestamp() }
+      tx.update(ref, patch)
+      return { ...old, ...patch }
+    }
     const next = {
       nickname: nick,
       uid: user.uid,
       totalPlayed,
       totalWon,
-      accuracyBp: accuracyBpFrom(totalWon, totalPlayed),
+      accuracyBp,
       xp,
-      level: levelFromXp(xp),
-      createdAt: snap.exists() ? old.createdAt : serverTimestamp(),
+      level,
+      points,
+      createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }
     tx.set(ref, next)
     return next
+  })
+}
+
+/**
+ * 상점 아이템 구매. 잔여 포인트/미보유 여부는 클라이언트에서 먼저 확인하지만
+ * 실질적 검증은 firestore.rules의 isValidShopPurchase가 담당한다.
+ * @param {{ nickname:string, itemId:string }} p
+ * @returns {Promise<object>} 갱신된 플레이어 문서
+ */
+export async function purchaseItem({ nickname, itemId }) {
+  const item = SHOP_ITEMS.find((it) => it.id === itemId)
+  if (!item) throw new Error('UNKNOWN_ITEM')
+  const user = await ensureAnonymousAuth()
+  const nick = safeNickname(nickname)
+  const ref = doc(db, COL, nick)
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists()) throw new Error('NO_PLAYER_YET')
+    const old = snap.data()
+    if (old[item.field]) throw new Error('ALREADY_OWNED')
+    if ((old.points || 0) < item.price) throw new Error('NOT_ENOUGH_POINTS')
+    const patch = {
+      uid: user.uid,
+      points: (old.points || 0) - item.price,
+      [item.field]: true,
+      updatedAt: serverTimestamp(),
+    }
+    tx.update(ref, patch)
+    return { ...old, ...patch }
+  })
+}
+
+/**
+ * 출석 체크. KST 기준 하루 1회, 고정 XP 보너스 지급. 최소 1판 플레이(문서 존재) 후에만 가능.
+ * 이미 오늘 체크인했으면 에러를 던진다.
+ * @param {{ nickname:string }} p
+ * @returns {Promise<object>} 갱신된 플레이어 문서
+ */
+export async function checkIn({ nickname }) {
+  const user = await ensureAnonymousAuth()
+  const nick = safeNickname(nickname)
+  const ref = doc(db, COL, nick)
+  const todayKey = getDailyKey()
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists()) throw new Error('NO_PLAYER_YET')
+    const old = snap.data()
+    if (old.lastCheckinDate === todayKey) throw new Error('ALREADY_CHECKED_IN')
+    const streak = isConsecutiveDay(old.lastCheckinDate) ? (old.checkinStreak || 0) + 1 : 1
+    const xp = (old.xp || 0) + CHECKIN_XP_BONUS
+    const patch = {
+      uid: user.uid,
+      xp,
+      level: levelFromXp(xp),
+      lastCheckinDate: todayKey,
+      checkinStreak: streak,
+      updatedAt: serverTimestamp(),
+    }
+    tx.update(ref, patch)
+    return { ...old, ...patch }
   })
 }
 

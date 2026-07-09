@@ -20,6 +20,9 @@ export const ACHIEVEMENTS = [
   { id: 'level-5', emoji: '🆙', name: 'Lv.5 달성', desc: '레벨 5에 도달했어요' },
   { id: 'level-10', emoji: '🆙', name: 'Lv.10 달성', desc: '레벨 10에 도달했어요' },
   { id: 'level-20', emoji: '🆙', name: 'Lv.20 달성', desc: '레벨 20에 도달했어요' },
+  { id: 'checkin-3', emoji: '📅', name: '3일 연속 출석', desc: '3일 연속으로 출석 체크했어요' },
+  { id: 'checkin-7', emoji: '📅', name: '7일 연속 출석', desc: '7일 연속으로 출석 체크했어요' },
+  { id: 'checkin-30', emoji: '📅', name: '30일 연속 출석', desc: '30일 연속으로 출석 체크했어요' },
 ]
 
 function load() {
@@ -73,6 +76,30 @@ export function checkAndUnlock(ctx) {
   if (ctx.level >= 5) unlock('level-5')
   if (ctx.level >= 10) unlock('level-10')
   if (ctx.level >= 20) unlock('level-20')
+
+  save(state)
+  return newly.map((id) => ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean)
+}
+
+/**
+ * 출석 체크 시점의 연속일수로 새로 달성한 업적을 판정하고 저장한다.
+ * (게임 종료 이벤트가 아니므로 checkAndUnlock과 별도 호출)
+ * @param {{checkinStreak:number}} ctx
+ * @returns {Array<object>} 이번에 새로 달성한 업적 목록(없으면 빈 배열)
+ */
+export function checkAndUnlockCheckin(ctx) {
+  const state = load()
+  const newly = []
+  const unlock = (id) => {
+    if (!state.unlocked[id]) {
+      state.unlocked[id] = true
+      newly.push(id)
+    }
+  }
+
+  if (ctx.checkinStreak >= 3) unlock('checkin-3')
+  if (ctx.checkinStreak >= 7) unlock('checkin-7')
+  if (ctx.checkinStreak >= 30) unlock('checkin-30')
 
   save(state)
   return newly.map((id) => ACHIEVEMENTS.find((a) => a.id === id)).filter(Boolean)

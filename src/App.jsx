@@ -13,17 +13,24 @@ import ConfettiBurst from './components/ConfettiBurst'
 import IntroScreen from './components/IntroScreen'
 import Stats from './components/Stats'
 import Profile from './components/Profile'
+import SuggestWordModal from './components/SuggestWordModal'
+import Shop from './components/Shop'
+import CreateRoomModal from './components/CreateRoomModal'
+import RoomBoard from './components/RoomBoard'
 import XpBar from './components/XpBar'
 import { useWordleGame } from './hooks/useWordleGame'
 import { submitDailyScore } from './services/ranking'
-import { recordParticipation, getPlayerStats } from './services/players'
+import { recordParticipation, getPlayerStats, checkIn, purchaseItem } from './services/players'
+import { getRoom, submitRoomAttempt } from './services/rooms'
 import { isValidGuess, preloadGuessDict } from './constants/words'
 import { stageLabel } from './utils/format'
 import { buildShareText, shareResult } from './utils/share'
 import { getDailyKey } from './utils/daily'
 import { loadStats, recordResult } from './utils/stats'
-import { checkAndUnlock } from './utils/achievements'
+import { checkAndUnlock, checkAndUnlockCheckin } from './utils/achievements'
+import { CHECKIN_XP_BONUS } from './utils/checkin'
 import { decomposeWord } from './utils/hangul'
+import { deobfuscate } from './utils/secret'
 import styles from './styles/App.module.css'
 
 /** 오늘 저장된 데일리 결과 읽기 (없으면 null) */
@@ -42,9 +49,9 @@ const NOTICE_KEY = 'notice-level-system-v1'
 export default function App() {
   const game = useWordleGame()
   const {
-    started, isDaily, dailyKey, slots, stage, status, keyStates, attempts, maxRows, grid, evaluations,
+    started, isDaily, dailyKey, isRoom, roomId, slots, stage, status, keyStates, attempts, maxRows, grid, evaluations,
     current, currentLength, answer, hintUsed,
-    begin, beginDaily, pressKey, pressDelete, clearCurrent, useHint, pressEnter,
+    begin, beginDaily, beginRoom, pressKey, pressDelete, clearCurrent, useHint, pressEnter,
     retrySameMode, exitToIntro,
   } = game
 
@@ -57,6 +64,12 @@ export default function App() {
   const [dailyViewOpen, setDailyViewOpen] = useState(false)
   const [noticeOpen, setNoticeOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const [shopOpen, setShopOpen] = useState(false)
+  const [createRoomOpen, setCreateRoomOpen] = useState(false)
+  const [pendingRoom, setPendingRoom] = useState(null) // ?room= 링크로 들어왔을 때 { roomId, slots, creatorNickname, word }
+  const [roomLoadError, setRoomLoadError] = useState(false)
+  const [joinNick, setJoinNick] = useState('')
   const [regState, setRegState] = useState('idle') // idle|submitting|done|already|error
   const [stats, setStats] = useState(loadStats)
   const [playerStats, setPlayerStats] = useState(null) // { totalPlayed, totalWon, accuracyBp, level }
@@ -77,6 +90,23 @@ export default function App() {
         localStorage.setItem(NOTICE_KEY, '1')
       }
     } catch { /* noop */ }
+  }, [])
+
+  // ?room=코드 링크로 들어왔으면 방 정보를 조회해 참가 화면을 준비한다.
+  useEffect(() => {
+    const roomIdParam = new URLSearchParams(window.location.search).get('room')
+    if (!roomIdParam) return
+    getRoom(roomIdParam)
+      .then((data) => {
+        if (!data) { setRoomLoadError(true); return }
+        setPendingRoom({
+          roomId: roomIdParam,
+          slots: data.slots,
+          creatorNickname: data.creatorNickname,
+          word: deobfuscate(data.answerEnc),
+        })
+      })
+      .catch(() => setRoomLoadError(true))
   }, [])
 
   // 짧은 안내 토스트
@@ -116,6 +146,22 @@ export default function App() {
   useEffect(() => {
     if (prevStatus.current === 'playing' && status !== 'playing') {
       const won = status === 'won'
+
+      // 커스텀 방은 완전히 별도 흐름 — 친구가 고른 단어라 난이도 가정이 깨지므로
+      // XP/포인트/업적/로컬 통계 어디에도 반영하지 않고 방 랭킹에만 기록한다.
+      if (isRoom && roomId) {
+        submitRoomAttempt({ roomId, nickname, attempts, won }).catch((e) => {
+          if (e?.code !== 'permission-denied') {
+            // eslint-disable-next-line no-console
+            console.error('[submitRoomAttempt] 실패:', e)
+          }
+        })
+        const roomDelay = slots * 180 + 600
+        const roomTimer = setTimeout(() => setResultOpen(true), roomDelay)
+        prevStatus.current = status
+        return () => clearTimeout(roomTimer)
+      }
+
       const nextLocalStats = recordResult({ won, attempts, slots })
       setStats(nextLocalStats)
       if (isDaily && dailyKey) {
@@ -195,6 +241,33 @@ export default function App() {
       begin(pickedSlots)
     }
   }
+  // 방 링크로 들어온 경우: 닉네임 입력 후 참가.
+  const joinRoom = () => {
+    const v = joinNick.trim()
+    if (!v) {
+      showToast('닉네임을 입력해 주세요!')
+      return
+    }
+    const nick = v.slice(0, 12)
+    setNickname(nick)
+    setSubmittedId(null)
+    getPlayerStats(nick).then(setPlayerStats).catch(() => {})
+    beginRoom(pendingRoom.roomId, pendingRoom.word, pendingRoom.slots)
+  }
+
+  // 인트로에서 "커스텀 방 만들기" 클릭 — 닉네임을 먼저 확정하고 생성 모달을 연다.
+  const handleOpenCreateRoom = (nick) => {
+    setNickname(nick)
+    setCreateRoomOpen(true)
+  }
+  // 방 생성 직후 "지금 플레이하기" — 생성자도 자기 방에 바로 참가.
+  const handlePlayOwnRoom = (newRoomId, word, roomSlots) => {
+    setCreateRoomOpen(false)
+    setSubmittedId(null)
+    getPlayerStats(nickname).then(setPlayerStats).catch(() => {})
+    beginRoom(newRoomId, word, roomSlots)
+  }
+
   const handleShare = async () => {
     const text = buildShareText({
       stage, attempts, maxRows, evaluations,
@@ -218,19 +291,79 @@ export default function App() {
   const goRetry = () => { setResultOpen(false); setSubmittedId(null); retrySameMode() }
   const goIntro = () => { setResultOpen(false); setSubmittedId(null); exitToIntro() }
 
+  // 출석 체크 — 오늘 첫 시도면 서버에 반영하고 XP/스트릭 갱신, 업적 판정.
+  const handleCheckIn = useCallback(async () => {
+    try {
+      const next = await checkIn({ nickname })
+      setPlayerStats(next)
+      const newBadges = checkAndUnlockCheckin({ checkinStreak: next.checkinStreak })
+      const messages = [`📅 출석 체크 완료! +${CHECKIN_XP_BONUS} XP (🔥${next.checkinStreak}일)`]
+      if (newBadges.length > 0) messages.push(`🏅 ${newBadges.map((b) => b.name).join(', ')}`)
+      showToast(messages.join(' · '))
+    } catch (e) {
+      if (e?.message === 'ALREADY_CHECKED_IN') {
+        showToast('오늘은 이미 체크인했어요 🌙')
+      } else if (e?.message === 'NO_PLAYER_YET') {
+        showToast('먼저 한 판 플레이해야 체크인할 수 있어요 🎮')
+      } else {
+        // eslint-disable-next-line no-console
+        console.error('[checkIn] 실패:', e)
+        showToast('체크인에 실패했어요 😢')
+      }
+    }
+  }, [nickname, showToast])
+
+  // 상점 구매 — 성공 시 playerStats 갱신, 실패 사유는 Shop 컴포넌트가 메시지로 보여줌(그대로 던짐).
+  const handlePurchase = useCallback(async (itemId) => {
+    const next = await purchaseItem({ nickname, itemId })
+    setPlayerStats(next)
+    showToast('구매 완료! 🛒')
+  }, [nickname, showToast])
+
   const isWon = status === 'won'
   const isLost = status === 'lost'
   const mascotMood = isWon ? 'happy' : isLost ? 'sad' : 'idle'
   const winRow = isWon ? attempts - 1 : -1
+  const mySkin = playerStats?.ownedSkinRobot ? 'robot' : playerStats?.ownedSkinCat ? 'cat' : 'default'
 
   // 인트로: 닉네임 입력 후 시작. 데일리 이미 참여했으면 랭킹 열람만.
   if (!started) {
+    // 방 링크(?room=코드)로 들어온 경우: 일반 인트로 대신 참가 화면을 보여준다.
+    if (pendingRoom) {
+      return (
+        <div className={styles.app}>
+          <div className={styles.result} style={{ maxWidth: 420, margin: '60px auto' }}>
+            <Mascot mood="idle" size={100} />
+            <h2 className={styles.resultTitle}>{pendingRoom.creatorNickname}님의 방에 초대됐어요! 🔗</h2>
+            <p className={styles.resultDesc}>{pendingRoom.slots}칸 단어 맞히기 — 참가할 닉네임을 입력해 주세요</p>
+            <input
+              className={styles.input}
+              value={joinNick}
+              onChange={(e) => setJoinNick(e.target.value)}
+              placeholder="닉네임"
+              maxLength={12}
+              autoFocus
+            />
+            <div className={styles.registerBtns} style={{ marginTop: 10 }}>
+              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={joinRoom}>🎮 참가하기</button>
+            </div>
+          </div>
+          {toast && <div className={styles.globalToast} role="status">{toast}</div>}
+        </div>
+      )
+    }
     const savedDaily = readSavedDaily(getDailyKey())
     return (
       <>
+        {roomLoadError && (
+          <div className={styles.globalToast} role="status">
+            방을 찾을 수 없어요 — 만료됐거나 잘못된 링크예요 😢
+          </div>
+        )}
         <IntroScreen
           onStart={handleStart}
           onViewDaily={() => setDailyViewOpen(true)}
+          onCreateRoom={handleOpenCreateRoom}
           stats={stats}
           defaultNick={nickname}
         />
@@ -291,6 +424,17 @@ export default function App() {
             </button>
           </div>
         </Modal>
+        <Modal
+          open={createRoomOpen}
+          title="create-room"
+          onClose={() => setCreateRoomOpen(false)}
+        >
+          <CreateRoomModal
+            nickname={nickname}
+            onDone={() => setCreateRoomOpen(false)}
+            onPlay={handlePlayOwnRoom}
+          />
+        </Modal>
       </>
     )
   }
@@ -300,7 +444,7 @@ export default function App() {
       {/* ===== 헤더 ===== */}
       <header className={styles.header}>
         <div className={styles.brand}>
-          <Mascot mood={mascotMood} size={54} />
+          <Mascot mood={mascotMood} size={54} skin={mySkin} />
           <div className={styles.brandText}>
             <h1 className={styles.logo}>
               <span className={styles.prompt}>{'>'}</span> 자모 워들
@@ -315,8 +459,8 @@ export default function App() {
         <div className={styles.stats}>
           <div className={styles.statBox}>
             <span className={styles.statLabel}>MODE</span>
-            <span className={`${styles.statValue} ${(stage >= 2 || isDaily) ? styles.hot : ''}`}>
-              {isDaily ? '📅 데일리' : stageLabel(stage)}
+            <span className={`${styles.statValue} ${(stage >= 2 || isDaily || isRoom) ? styles.hot : ''}`}>
+              {isDaily ? '📅 데일리' : isRoom ? '🔗 커스텀 방' : stageLabel(stage)}
             </span>
           </div>
           <div className={styles.statBox}>
@@ -379,12 +523,12 @@ export default function App() {
       >
         {isWon && <ConfettiBurst />}
         <div className={styles.result}>
-          <Mascot mood={mascotMood} size={110} className={styles.resultMascot} />
+          <Mascot mood={mascotMood} size={110} className={styles.resultMascot} skin={mySkin} />
 
           {isWon ? (
             <>
               <h2 className={styles.resultTitle}>
-                {isDaily ? '오늘의 챌린지 성공! 🎯' : stage >= 2 ? '챌린지 정복! 🏆' : '정답이에요! 🎉'}
+                {isDaily ? '오늘의 챌린지 성공! 🎯' : isRoom ? '방 클리어! 🔗' : stage >= 2 ? '챌린지 정복! 🏆' : '정답이에요! 🎉'}
               </h2>
               <p className={styles.resultDesc}>
                 정답은 <b className={styles.answerWord}>{answer}</b>
@@ -392,7 +536,7 @@ export default function App() {
               </p>
               <div className={styles.resultStats}>
                 <span>🎯 {attempts}번 시도</span>
-                <span>🏅 {isDaily ? `데일리 #${dailyKey}` : stageLabel(stage)}</span>
+                <span>🏅 {isDaily ? `데일리 #${dailyKey}` : isRoom ? `방 #${roomId}` : stageLabel(stage)}</span>
               </div>
             </>
           ) : (
@@ -429,7 +573,7 @@ export default function App() {
               🪪 내 프로필
             </button>
 
-            {isDaily ? (
+            {isDaily || isRoom ? (
               <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goIntro}>🏠 홈으로</button>
             ) : (
               <>
@@ -439,14 +583,18 @@ export default function App() {
             )}
           </div>
 
-          <div className={styles.resultRanking}>
-            <Stats stats={stats} highlight={isWon ? attempts : -1} compact />
-          </div>
+          {!isRoom && (
+            <div className={styles.resultRanking}>
+              <Stats stats={stats} highlight={isWon ? attempts : -1} compact />
+            </div>
+          )}
 
           <div className={styles.resultRanking}>
             {isDaily
               ? <DailyBoard dateKey={dailyKey} highlightId={submittedId} compact />
-              : <Leaderboard highlightId={nickname} compact />}
+              : isRoom
+                ? <RoomBoard roomId={roomId} highlightId={`${roomId}__${nickname}`} compact />
+                : <Leaderboard highlightId={nickname} compact />}
           </div>
         </div>
       </Modal>
@@ -457,7 +605,32 @@ export default function App() {
         title="profile"
         onClose={() => setProfileOpen(false)}
       >
-        <Profile nickname={nickname} playerStats={playerStats} localStats={stats} />
+        <Profile
+          nickname={nickname}
+          playerStats={playerStats}
+          localStats={stats}
+          onSuggestWord={() => setSuggestOpen(true)}
+          onCheckIn={handleCheckIn}
+          onOpenShop={() => setShopOpen(true)}
+        />
+      </Modal>
+
+      {/* ===== 단어 제안 모달 ===== */}
+      <Modal
+        open={suggestOpen}
+        title="suggest-word"
+        onClose={() => setSuggestOpen(false)}
+      >
+        <SuggestWordModal nickname={nickname} onDone={() => setSuggestOpen(false)} />
+      </Modal>
+
+      {/* ===== 상점 모달 ===== */}
+      <Modal
+        open={shopOpen}
+        title="shop"
+        onClose={() => setShopOpen(false)}
+      >
+        <Shop playerStats={playerStats} onPurchase={handlePurchase} />
       </Modal>
     </div>
   )
