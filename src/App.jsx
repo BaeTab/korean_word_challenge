@@ -477,6 +477,15 @@ export default function App() {
             <span className={styles.statValue}>Lv.{playerStats?.level ?? 1}</span>
             <XpBar xp={playerStats?.xp ?? 0} compact />
           </button>
+          <button
+            type="button"
+            className={`${styles.statBox} ${styles.statBoxBtn}`}
+            onClick={() => setShopOpen(true)}
+            title="상점 열기"
+          >
+            <span className={styles.statLabel}>SHOP</span>
+            <span className={styles.statValue}>🪙 {playerStats?.points ?? 0}</span>
+          </button>
         </div>
       </header>
 
