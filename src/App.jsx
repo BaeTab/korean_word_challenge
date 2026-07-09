@@ -20,7 +20,7 @@ import RoomBoard from './components/RoomBoard'
 import XpBar from './components/XpBar'
 import { useWordleGame } from './hooks/useWordleGame'
 import { submitDailyScore } from './services/ranking'
-import { recordParticipation, getPlayerStats, checkIn, purchaseItem } from './services/players'
+import { recordParticipation, getPlayerStats, checkIn, purchaseItem, equipSkin } from './services/players'
 import { getRoom, submitRoomAttempt } from './services/rooms'
 import { isValidGuess, preloadGuessDict } from './constants/words'
 import { stageLabel } from './utils/format'
@@ -320,11 +320,17 @@ export default function App() {
     showToast('구매 완료! 🛒')
   }, [nickname, showToast])
 
+  // 스킨 장착 — 무료. 실패 사유는 Shop 컴포넌트가 메시지로 보여줌(그대로 던짐).
+  const handleEquip = useCallback(async (skinId) => {
+    const next = await equipSkin({ nickname, skinId })
+    setPlayerStats(next)
+  }, [nickname])
+
   const isWon = status === 'won'
   const isLost = status === 'lost'
   const mascotMood = isWon ? 'happy' : isLost ? 'sad' : 'idle'
   const winRow = isWon ? attempts - 1 : -1
-  const mySkin = playerStats?.ownedSkinRobot ? 'robot' : playerStats?.ownedSkinCat ? 'cat' : 'default'
+  const mySkin = playerStats?.equippedSkin || 'default'
 
   // 인트로: 닉네임 입력 후 시작. 데일리 이미 참여했으면 랭킹 열람만.
   if (!started) {
@@ -639,7 +645,7 @@ export default function App() {
         title="shop"
         onClose={() => setShopOpen(false)}
       >
-        <Shop playerStats={playerStats} onPurchase={handlePurchase} />
+        <Shop playerStats={playerStats} onPurchase={handlePurchase} onEquip={handleEquip} />
       </Modal>
     </div>
   )

@@ -46,7 +46,7 @@ export async function getPlayerStats(nickname) {
 /**
  * 게임 종료(승패 무관) 시 참여 기록. 익명 로그인 보장 후 트랜잭션으로 누적치를 갱신한다.
  * 승리 시 상점 포인트도 함께 적립(pointsForGame). 기존 문서 갱신은 tx.update()로
- * 변경 필드만 건드려 출석 체크/상점 필드(lastCheckinDate·checkinStreak·ownedSkinX)를
+ * 변경 필드만 건드려 출석 체크/상점 필드(lastCheckinDate·checkinStreak·owned·equippedSkin)를
  * 실수로 지우지 않는다(§0 필드 고정 원칙 — 신규 필드가 계속 생겨도 안전).
  * @param {{ nickname:string, won:boolean, slots:number }} p
  * @returns {Promise<object>} 갱신된 플레이어 문서
@@ -88,7 +88,8 @@ export async function recordParticipation({ nickname, won, slots }) {
 }
 
 /**
- * 상점 아이템 구매. 잔여 포인트/미보유 여부는 클라이언트에서 먼저 확인하지만
+ * 상점 아이템 구매. 소유 아이템은 owned 맵(`{ [itemId]: true }`)에 누적 저장된다.
+ * 잔여 포인트/미보유 여부는 클라이언트에서 먼저 확인하지만
  * 실질적 검증은 firestore.rules의 isValidShopPurchase가 담당한다.
  * @param {{ nickname:string, itemId:string }} p
  * @returns {Promise<object>} 갱신된 플레이어 문서
@@ -103,14 +104,35 @@ export async function purchaseItem({ nickname, itemId }) {
     const snap = await tx.get(ref)
     if (!snap.exists()) throw new Error('NO_PLAYER_YET')
     const old = snap.data()
-    if (old[item.field]) throw new Error('ALREADY_OWNED')
+    if (old.owned?.[itemId]) throw new Error('ALREADY_OWNED')
     if ((old.points || 0) < item.price) throw new Error('NOT_ENOUGH_POINTS')
     const patch = {
       uid: user.uid,
       points: (old.points || 0) - item.price,
-      [item.field]: true,
+      owned: { ...(old.owned || {}), [itemId]: true },
       updatedAt: serverTimestamp(),
     }
+    tx.update(ref, patch)
+    return { ...old, ...patch }
+  })
+}
+
+/**
+ * 보유한 스킨(또는 'default')을 장착. 무료. 미보유 스킨 장착은 클라이언트에서 막지만
+ * 실질적 검증은 firestore.rules의 isValidEquipUpdate가 담당한다.
+ * @param {{ nickname:string, skinId:string }} p
+ * @returns {Promise<object>} 갱신된 플레이어 문서
+ */
+export async function equipSkin({ nickname, skinId }) {
+  const user = await ensureAnonymousAuth()
+  const nick = safeNickname(nickname)
+  const ref = doc(db, COL, nick)
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists()) throw new Error('NO_PLAYER_YET')
+    const old = snap.data()
+    if (skinId !== 'default' && !old.owned?.[skinId]) throw new Error('NOT_OWNED')
+    const patch = { uid: user.uid, equippedSkin: skinId, updatedAt: serverTimestamp() }
     tx.update(ref, patch)
     return { ...old, ...patch }
   })

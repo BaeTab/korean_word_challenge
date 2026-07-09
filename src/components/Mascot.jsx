@@ -16,6 +16,10 @@ export const SKINS = {
   default: { body: '#161b22', accent: '#3ddc97', pupil: '#e6fff4' },
   cat: { body: '#1c1420', accent: '#ffb454', pupil: '#fff3de' },
   robot: { body: '#0f1620', accent: '#6fb1ff', pupil: '#e8f2ff' },
+  ghost: { body: '#1a1625', accent: '#e0d6ff', pupil: '#f5f0ff' },
+  alien: { body: '#0a1f0a', accent: '#9dff57', pupil: '#eaffd6' },
+  panda: { body: '#0d0d0d', accent: '#f5f5f5', pupil: '#dfe6ea' },
+  ninja: { body: '#1a0505', accent: '#ff3b3b', pupil: '#ffe0e0' },
 }
 
 export default function Mascot({ mood = 'idle', size = 96, className = '', skin = 'default' }) {
@@ -44,6 +48,37 @@ export default function Mascot({ mood = 'idle', size = 96, className = '', skin 
           <line x1="32" y1="8" x2="32" y2="1" stroke={s.accent} strokeWidth="2.5" strokeLinecap="round" />
           <circle cx="32" cy="0" r="2.6" fill={s.accent} />
         </>
+      )}
+      {/* 유령 스킨: 반짝임 */}
+      {skin === 'ghost' && (
+        <>
+          <circle cx="9" cy="6" r="1.6" fill={s.accent}>
+            <animate attributeName="opacity" values="1;0.1;1" dur="1.6s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="55" cy="10" r="1.2" fill={s.accent}>
+            <animate attributeName="opacity" values="0.2;1;0.2" dur="1.6s" repeatCount="indefinite" />
+          </circle>
+        </>
+      )}
+      {/* 외계인 스킨: 더듬이 */}
+      {skin === 'alien' && (
+        <>
+          <line x1="20" y1="8" x2="14" y2="0" stroke={s.accent} strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="13" cy="-1" r="2.2" fill={s.accent} />
+          <line x1="44" y1="8" x2="50" y2="0" stroke={s.accent} strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="51" cy="-1" r="2.2" fill={s.accent} />
+        </>
+      )}
+      {/* 판다 스킨: 둥근 귀 */}
+      {skin === 'panda' && (
+        <>
+          <circle cx="11" cy="9" r="7" fill={s.body} stroke={s.accent} strokeWidth="2.5" />
+          <circle cx="53" cy="9" r="7" fill={s.body} stroke={s.accent} strokeWidth="2.5" />
+        </>
+      )}
+      {/* 닌자 스킨: 머리띠 */}
+      {skin === 'ninja' && (
+        <rect x="4" y="24" width="56" height="5" fill={s.accent} opacity="0.85" />
       )}
 
       {/* 몸통 (둥근 터미널 창) */}

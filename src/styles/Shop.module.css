@@ -14,6 +14,29 @@
 .balance b { color: var(--amber); }
 .error { margin: 0; color: var(--pink); font-size: 0.82rem; }
 
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.section:first-of-type { border-top: none; padding-top: 0; }
+.sectionTitle {
+  margin: 0;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.empty {
+  grid-column: 1 / -1;
+  margin: 4px 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

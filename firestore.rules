@@ -26,7 +26,8 @@ service cloud.firestore {
       allow update: if request.auth != null && (
         isValidGameplayUpdate(request.resource.data, resource.data) ||
         isValidCheckinUpdate(request.resource.data, resource.data) ||
-        isValidShopPurchase(request.resource.data, resource.data)
+        isValidShopPurchase(request.resource.data, resource.data) ||
+        isValidEquipUpdate(request.resource.data, resource.data)
       );
 
       allow delete: if false;
@@ -64,8 +65,8 @@ service cloud.firestore {
         && d.accuracyBp == int(d.totalWon * 10000 / d.totalPlayed)
         && isValidXpLevel(d, d.xp)
         && isValidPointsForXp(d.xp, d.get('points', 0))
-        && d.get('ownedSkinCat', false) == false
-        && d.get('ownedSkinRobot', false) == false
+        && d.get('owned', {}) == {}
+        && d.get('equippedSkin', 'default') == 'default'
         && d.get('checkinStreak', 0) == 0
         && !d.keys().hasAny(['lastCheckinDate'])
         && d.createdAt == request.time
@@ -87,8 +88,8 @@ service cloud.firestore {
         && d.accuracyBp == int(d.totalWon * 10000 / d.totalPlayed)
         && isValidXpLevel(d, d.xp - oldXp)
         && isValidPointsForXp(d.xp - oldXp, d.get('points', 0) - oldPoints)
-        && d.get('ownedSkinCat', false) == old.get('ownedSkinCat', false)
-        && d.get('ownedSkinRobot', false) == old.get('ownedSkinRobot', false)
+        && d.get('owned', {}) == old.get('owned', {})
+        && d.get('equippedSkin', 'default') == old.get('equippedSkin', 'default')
         && d.get('lastCheckinDate', '') == old.get('lastCheckinDate', '')
         && d.get('checkinStreak', 0) == old.get('checkinStreak', 0)
         && d.createdAt == old.createdAt
@@ -113,8 +114,8 @@ service cloud.firestore {
         && 25 * d.level * (d.level - 1) <= d.xp
         && d.xp < 25 * (d.level + 1) * d.level
         && d.get('points', 0) == old.get('points', 0)
-        && d.get('ownedSkinCat', false) == old.get('ownedSkinCat', false)
-        && d.get('ownedSkinRobot', false) == old.get('ownedSkinRobot', false)
+        && d.get('owned', {}) == old.get('owned', {})
+        && d.get('equippedSkin', 'default') == old.get('equippedSkin', 'default')
         && d.lastCheckinDate is string
         && d.lastCheckinDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
         && d.lastCheckinDate > old.get('lastCheckinDate', '')
@@ -125,11 +126,21 @@ service cloud.firestore {
         && d.updatedAt == request.time;
     }
 
-    // 상점 구매 — 코스메틱 스킨 1회성 unlock. 가격/필드는 src/constants/shop.js와 동일해야 함.
-    // 아이템별 전용 boolean 필드를 써서 "정확히 이 아이템만 구매됨"을 단순 비교로 증명한다
-    // (맵 필드였다면 "다른 키는 안 바뀜"을 증명하기 번거로움 — 카탈로그가 커지면
-    // players/{nick}/inventory/{itemId} 서브컬렉션(create-only)으로 전환 고려).
+    // 상점 구매 — 코스메틱 스킨 1회성 unlock. 소유 아이템은 owned 맵 하나에 모아
+    // `{ [itemId]: true }` 형태로 저장한다(개별 boolean 필드 대신). 이렇게 하면
+    // 카탈로그가 늘어나도 게임결과/체크인 분기는 손댈 필요 없이 owned 맵 전체를
+    // "안 바뀜"으로 한 줄만 고정하면 된다. 가격은 src/constants/shop.js와 동일해야 함.
+    // newOwned.diff(oldOwned)로 "정확히 아이템 1개만 추가됐는지"를 검증하고,
+    // 추가된 아이템(added)과 차감된 포인트(pointsDelta)가 반드시 짝을 이루도록
+    // 같은 문서·같은 쓰기 안에서 함께 검증해 "싼 아이템 값 내고 비싼 아이템 획득" 같은
+    // 불일치를 원천 차단한다(별도 컬렉션이었다면 문서 간 교차검증이 훨씬 번거로워짐).
     function isValidShopPurchase(d, old) {
+      let oldOwned = old.get('owned', {});
+      let newOwned = d.get('owned', {});
+      let diff = newOwned.diff(oldOwned);
+      let added = diff.addedKeys();
+      let pointsDelta = old.get('points', 0) - d.points;
+
       let base = d.nickname == old.nickname
         && d.uid is string && d.uid == request.auth.uid
         && d.totalPlayed == old.totalPlayed
@@ -137,20 +148,45 @@ service cloud.firestore {
         && d.accuracyBp == old.accuracyBp
         && d.xp == old.get('xp', 0)
         && d.level == old.get('level', 1)
+        && d.get('equippedSkin', 'default') == old.get('equippedSkin', 'default')
         && d.get('lastCheckinDate', '') == old.get('lastCheckinDate', '')
         && d.get('checkinStreak', 0) == old.get('checkinStreak', 0)
         && d.createdAt == old.createdAt
+        && d.updatedAt == request.time
+        && d.points >= 0
+        && diff.removedKeys().size() == 0
+        && diff.changedKeys().size() == 0
+        && added.size() == 1;
+
+      return base && (
+        (added.hasOnly(['skin-cat'])   && newOwned['skin-cat']   == true && pointsDelta == 15) ||
+        (added.hasOnly(['skin-ghost']) && newOwned['skin-ghost'] == true && pointsDelta == 20) ||
+        (added.hasOnly(['skin-robot']) && newOwned['skin-robot'] == true && pointsDelta == 25) ||
+        (added.hasOnly(['skin-alien']) && newOwned['skin-alien'] == true && pointsDelta == 30) ||
+        (added.hasOnly(['skin-panda']) && newOwned['skin-panda'] == true && pointsDelta == 35) ||
+        (added.hasOnly(['skin-ninja']) && newOwned['skin-ninja'] == true && pointsDelta == 40)
+      );
+    }
+
+    // 스킨 장착 — 무료. 보유한 스킨(또는 'default')으로만 바꿀 수 있고 그 외 모든
+    // 경제 관련 필드는 고정. owned 맵 자체도 이 분기에서는 절대 바뀌지 않는다.
+    function isValidEquipUpdate(d, old) {
+      let oldOwned = old.get('owned', {});
+      return d.nickname == old.nickname
+        && d.uid is string && d.uid == request.auth.uid
+        && d.totalPlayed == old.totalPlayed
+        && d.totalWon == old.totalWon
+        && d.accuracyBp == old.accuracyBp
+        && d.xp == old.get('xp', 0)
+        && d.level == old.get('level', 1)
+        && d.get('points', 0) == old.get('points', 0)
+        && d.get('owned', {}) == oldOwned
+        && d.get('lastCheckinDate', '') == old.get('lastCheckinDate', '')
+        && d.get('checkinStreak', 0) == old.get('checkinStreak', 0)
+        && d.equippedSkin is string
+        && (d.equippedSkin == 'default' || oldOwned.get(d.equippedSkin, false) == true)
+        && d.createdAt == old.createdAt
         && d.updatedAt == request.time;
-
-      let buyCat = d.points == old.get('points', 0) - 15 && d.points >= 0
-        && old.get('ownedSkinCat', false) == false && d.ownedSkinCat == true
-        && d.get('ownedSkinRobot', false) == old.get('ownedSkinRobot', false);
-
-      let buyRobot = d.points == old.get('points', 0) - 25 && d.points >= 0
-        && old.get('ownedSkinRobot', false) == false && d.ownedSkinRobot == true
-        && d.get('ownedSkinCat', false) == old.get('ownedSkinCat', false);
-
-      return base && (buyCat || buyRobot);
     }
 
     // 데일리 챌린지 랭킹 — 문서 ID가 `날짜__닉네임` 이라 update 금지로 하루 1회 강제
