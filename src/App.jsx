@@ -12,6 +12,8 @@ import Mascot from './components/Mascot'
 import ConfettiBurst from './components/ConfettiBurst'
 import IntroScreen from './components/IntroScreen'
 import Stats from './components/Stats'
+import Profile from './components/Profile'
+import XpBar from './components/XpBar'
 import { useWordleGame } from './hooks/useWordleGame'
 import { submitDailyScore } from './services/ranking'
 import { recordParticipation, getPlayerStats } from './services/players'
@@ -20,6 +22,7 @@ import { stageLabel } from './utils/format'
 import { buildShareText, shareResult } from './utils/share'
 import { getDailyKey } from './utils/daily'
 import { loadStats, recordResult } from './utils/stats'
+import { checkAndUnlock } from './utils/achievements'
 import { decomposeWord } from './utils/hangul'
 import styles from './styles/App.module.css'
 
@@ -53,6 +56,7 @@ export default function App() {
   const [dailyDone, setDailyDone] = useState(false)
   const [dailyViewOpen, setDailyViewOpen] = useState(false)
   const [noticeOpen, setNoticeOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
   const [regState, setRegState] = useState('idle') // idle|submitting|done|already|error
   const [stats, setStats] = useState(loadStats)
   const [playerStats, setPlayerStats] = useState(null) // { totalPlayed, totalWon, accuracyBp, level }
@@ -108,11 +112,12 @@ export default function App() {
   }, [showToast])
 
   // 승패 전환 시: 통계 기록 + (데일리면) 참여 잠금 저장 + 승리 시 데일리 랭킹 자동 등록
-  //  + 레벨 프로필 갱신(승패 무관, 모든 모드에서 참여로 집계) + 결과 모달 오픈
+  //  + 레벨 프로필 갱신(승패 무관, 모든 모드에서 참여로 집계) + 업적 판정 + 결과 모달 오픈
   useEffect(() => {
     if (prevStatus.current === 'playing' && status !== 'playing') {
       const won = status === 'won'
-      setStats(recordResult({ won, attempts }))
+      const nextLocalStats = recordResult({ won, attempts, slots })
+      setStats(nextLocalStats)
       if (isDaily && dailyKey) {
         try {
           localStorage.setItem(
@@ -129,10 +134,20 @@ export default function App() {
         setRegState('idle')
       }
       const prevLevel = playerStats?.level ?? 1
-      recordParticipation({ nickname, won })
+      recordParticipation({ nickname, won, slots })
         .then((next) => {
-          if (next.level > prevLevel) showToast(`🎉 레벨업! Lv.${next.level}`)
           setPlayerStats(next)
+          const newBadges = checkAndUnlock({
+            won, slots,
+            streak: nextLocalStats.streak,
+            totalPlayed: next.totalPlayed,
+            level: next.level,
+            accuracyBp: next.accuracyBp,
+          })
+          const messages = []
+          if (next.level > prevLevel) messages.push(`🎉 레벨업! Lv.${next.level}`)
+          if (newBadges.length > 0) messages.push(`🏅 ${newBadges.map((b) => b.name).join(', ')}`)
+          if (messages.length > 0) showToast(messages.join(' · '))
         })
         .catch((e) => {
           // eslint-disable-next-line no-console
@@ -308,10 +323,16 @@ export default function App() {
             <span className={styles.statLabel}>TRY</span>
             <span className={styles.statValue}>{attempts}/{maxRows}</span>
           </div>
-          <div className={styles.statBox}>
+          <button
+            type="button"
+            className={`${styles.statBox} ${styles.statBoxBtn}`}
+            onClick={() => setProfileOpen(true)}
+            title="내 프로필 보기"
+          >
             <span className={styles.statLabel}>LEVEL</span>
             <span className={styles.statValue}>Lv.{playerStats?.level ?? 1}</span>
-          </div>
+            <XpBar xp={playerStats?.xp ?? 0} compact />
+          </button>
         </div>
       </header>
 
@@ -404,6 +425,9 @@ export default function App() {
             <button className={`${styles.btn} ${styles.btnShare}`} onClick={handleShare}>
               📋 결과 공유하기
             </button>
+            <button className={`${styles.btn} ${styles.btnGhost}`} onClick={() => setProfileOpen(true)}>
+              🪪 내 프로필
+            </button>
 
             {isDaily ? (
               <button className={`${styles.btn} ${styles.btnGhost}`} onClick={goIntro}>🏠 홈으로</button>
@@ -425,6 +449,15 @@ export default function App() {
               : <Leaderboard highlightId={nickname} compact />}
           </div>
         </div>
+      </Modal>
+
+      {/* ===== 프로필 모달 ===== */}
+      <Modal
+        open={profileOpen}
+        title="profile"
+        onClose={() => setProfileOpen(false)}
+      >
+        <Profile nickname={nickname} playerStats={playerStats} localStats={stats} />
       </Modal>
     </div>
   )

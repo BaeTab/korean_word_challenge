@@ -1,0 +1,27 @@
+/* ===== XP 진행률 바 ===== */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+}
+.track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.compact .track { height: 4px; }
+.fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), var(--green-soft));
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}

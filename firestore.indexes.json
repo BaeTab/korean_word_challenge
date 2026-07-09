@@ -14,8 +14,7 @@
       "collectionGroup": "players",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "level", "order": "DESCENDING" },
-        { "fieldPath": "accuracyBp", "order": "DESCENDING" },
+        { "fieldPath": "xp", "order": "DESCENDING" },
         { "fieldPath": "totalPlayed", "order": "DESCENDING" }
       ]
     }

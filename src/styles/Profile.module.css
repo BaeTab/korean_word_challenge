@@ -1,0 +1,116 @@
+/* ===== 내 프로필 화면 ===== */
+.wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.levelBadge {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--green), var(--green-soft));
+  color: #04241a;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 1.1rem;
+  box-shadow: 0 8px 20px -8px rgba(61, 220, 151, 0.7);
+}
+.headText { display: flex; flex-direction: column; gap: 2px; }
+.nick { margin: 0; font-weight: 800; font-size: 1.05rem; color: var(--text); }
+.title { margin: 0; font-family: var(--font-mono); font-size: 0.78rem; color: var(--amber); }
+
+.xpNote {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+.cellValue {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--green);
+  white-space: nowrap;
+}
+.cellLabel { font-size: 0.62rem; letter-spacing: 0.5px; color: var(--text-dim); }
+
+.section { display: flex; flex-direction: column; gap: 8px; }
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.modeRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.modeCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+.modeLabel { font-size: 0.68rem; color: var(--text-dim); }
+.modeValue { font-family: var(--font-mono); font-weight: 700; font-size: 0.8rem; color: var(--text); }
+
+.achGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+.badgeDone {
+  border-color: var(--green);
+  background: rgba(61, 220, 151, 0.1);
+}
+.badgeLocked { opacity: 0.55; }
+.badgeEmoji { font-size: 1.05rem; }
+.badgeName {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .achGrid { grid-template-columns: 1fr; }
+}

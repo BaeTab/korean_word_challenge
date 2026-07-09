@@ -25,8 +25,18 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // XP 획득량은 xpForGame(src/utils/level.js)과 반드시 일치해야 함:
+    //  5칸: 패배10·승리30  6칸: 패배15·승리45  7칸: 패배20·승리60
+    // 레벨은 xp의 삼각수 임계값 함수(25*N*(N-1))로 검증 — 나눗셈/제곱근 불필요, 순수 곱셈만 사용.
+    function isValidXpLevel(d, xpDelta) {
+      return d.xp is int && xpDelta in [10, 15, 20, 30, 45, 60]
+        && d.level is int && d.level >= 1
+        && 25 * d.level * (d.level - 1) <= d.xp
+        && d.xp < 25 * (d.level + 1) * d.level;
+    }
+
     function isValidPlayerCreate(d) {
-      return d.keys().hasAll(['nickname', 'uid', 'totalPlayed', 'totalWon', 'accuracyBp', 'level', 'createdAt', 'updatedAt'])
+      return d.keys().hasAll(['nickname', 'uid', 'totalPlayed', 'totalWon', 'accuracyBp', 'xp', 'level', 'createdAt', 'updatedAt'])
         && d.nickname is string
         && d.nickname.size() >= 1 && d.nickname.size() <= 12
         && d.uid is string && d.uid == request.auth.uid
@@ -34,21 +44,23 @@ service cloud.firestore {
         && d.totalWon is int && (d.totalWon == 0 || d.totalWon == 1)
         && d.accuracyBp is int && d.accuracyBp >= 0 && d.accuracyBp <= 10000
         && d.accuracyBp == int(d.totalWon * 10000 / d.totalPlayed)
-        && d.level is int && d.level == int(d.totalPlayed / 10) + 1
+        && isValidXpLevel(d, d.xp)
         && d.createdAt == request.time
         && d.updatedAt == request.time;
     }
 
     // 참여 1회당 totalPlayed+1, 승리 시에만 totalWon+1(증분 0 또는 1). 닉네임 불변.
+    // old.get('xp',0): xp 필드 도입 이전(구버전) 문서도 0에서부터 자연스럽게 이어받도록 마이그레이션.
     function isValidPlayerUpdate(d, old) {
-      return d.keys().hasAll(['nickname', 'uid', 'totalPlayed', 'totalWon', 'accuracyBp', 'level', 'createdAt', 'updatedAt'])
+      let oldXp = old.get('xp', 0);
+      return d.keys().hasAll(['nickname', 'uid', 'totalPlayed', 'totalWon', 'accuracyBp', 'xp', 'level', 'createdAt', 'updatedAt'])
         && d.nickname == old.nickname
         && d.uid is string && d.uid == request.auth.uid
         && d.totalPlayed is int && d.totalPlayed == old.totalPlayed + 1
         && d.totalWon is int && (d.totalWon == old.totalWon || d.totalWon == old.totalWon + 1)
         && d.accuracyBp is int && d.accuracyBp >= 0 && d.accuracyBp <= 10000
         && d.accuracyBp == int(d.totalWon * 10000 / d.totalPlayed)
-        && d.level is int && d.level == int(d.totalPlayed / 10) + 1
+        && isValidXpLevel(d, d.xp - oldXp)
         && d.createdAt == old.createdAt
         && d.updatedAt == request.time;
     }

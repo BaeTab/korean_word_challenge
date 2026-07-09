@@ -84,6 +84,11 @@
   color: var(--pink);
   text-shadow: 0 0 12px rgba(255, 126, 182, 0.5);
 }
+.statBoxBtn {
+  cursor: pointer;
+  transition: transform 0.15s var(--ease-bounce), border-color 0.2s;
+}
+.statBoxBtn:hover { transform: translateY(-2px); border-color: var(--green); }
 
 /* ---- 본문: 게임 단일 컬럼 (랭킹은 인트로/결과에서만) ---- */
 .main {

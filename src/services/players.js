@@ -1,15 +1,14 @@
 // -----------------------------------------------------------------------------
 // 플레이어 레벨 프로필 서비스 (Firestore)
 //  컬렉션: players
-//  문서 스키마: { nickname, uid, totalPlayed, totalWon, accuracyBp, level, createdAt, updatedAt }
+//  문서 스키마: { nickname, uid, totalPlayed, totalWon, accuracyBp, xp, level, createdAt, updatedAt }
 //  문서 ID: 닉네임(안전화) → 같은 닉네임을 쓰는 다른 사람과 기록을 공유(rankings와 동일한 기존 관례)
 //
-//  참여(승패 무관) 1판마다 totalPlayed+1, 승리 시 totalWon도 +1.
+//  참여(승패 무관) 1판마다 totalPlayed+1, 승리 시 totalWon도 +1, xp는 칸수·승패에 따라 증가.
 //  accuracyBp(만분율 정수)/level은 매 갱신마다 재계산해 함께 저장 —
-//  Firestore가 group-by를 지원하지 않아 "레벨→정답률→참여횟수" 정렬을 위해
-//  level도 실제 정렬 가능한 필드로 저장해야 한다.
+//  xp가 실질적인 성장 척도이며 level은 xp의 임계값 함수(src/utils/level.js) 그대로 저장.
 //
-//  랭킹 정렬 기준: level desc → accuracyBp desc → totalPlayed desc
+//  랭킹 정렬 기준: xp desc → totalPlayed desc
 // -----------------------------------------------------------------------------
 import {
   collection,
@@ -23,7 +22,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore'
 import { db, ensureAnonymousAuth } from '../firebase'
-import { accuracyBpFrom, levelFromPlayed } from '../utils/level'
+import { accuracyBpFrom, levelFromXp, xpForGame } from '../utils/level'
 
 const COL = 'players'
 
@@ -43,25 +42,27 @@ export async function getPlayerStats(nickname) {
 
 /**
  * 게임 종료(승패 무관) 시 참여 기록. 익명 로그인 보장 후 트랜잭션으로 누적치를 갱신한다.
- * @param {{ nickname:string, won:boolean }} p
+ * @param {{ nickname:string, won:boolean, slots:number }} p
  * @returns {Promise<object>} 갱신된 플레이어 문서
  */
-export async function recordParticipation({ nickname, won }) {
+export async function recordParticipation({ nickname, won, slots }) {
   const user = await ensureAnonymousAuth()
   const nick = safeNickname(nickname)
   const ref = doc(db, COL, nick)
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref)
-    const old = snap.exists() ? snap.data() : { totalPlayed: 0, totalWon: 0, createdAt: null }
+    const old = snap.exists() ? snap.data() : { totalPlayed: 0, totalWon: 0, xp: 0, createdAt: null }
     const totalPlayed = old.totalPlayed + 1
     const totalWon = old.totalWon + (won ? 1 : 0)
+    const xp = (old.xp || 0) + xpForGame({ slots, won })
     const next = {
       nickname: nick,
       uid: user.uid,
       totalPlayed,
       totalWon,
       accuracyBp: accuracyBpFrom(totalWon, totalPlayed),
-      level: levelFromPlayed(totalPlayed),
+      xp,
+      level: levelFromXp(xp),
       createdAt: snap.exists() ? old.createdAt : serverTimestamp(),
       updatedAt: serverTimestamp(),
     }
@@ -71,7 +72,7 @@ export async function recordParticipation({ nickname, won }) {
 }
 
 /**
- * 실시간 Top N 플레이어 구독(레벨→정답률→참여횟수 순).
+ * 실시간 Top N 플레이어 구독(XP→참여횟수 순 — XP가 레벨을 결정하므로 사실상 레벨순).
  * @param {(rows:Array<object>)=>void} onData
  * @param {(err:Error)=>void} [onError]
  * @param {number} [top=50]
@@ -80,8 +81,7 @@ export async function recordParticipation({ nickname, won }) {
 export function subscribeTopPlayers(onData, onError, top = 50) {
   const q = query(
     collection(db, COL),
-    orderBy('level', 'desc'),
-    orderBy('accuracyBp', 'desc'),
+    orderBy('xp', 'desc'),
     orderBy('totalPlayed', 'desc'),
     limit(top),
   )

@@ -1,15 +1,44 @@
 // -----------------------------------------------------------------------------
-// 레벨/정답률 유틸 — 참여횟수 기반 레벨 + 정답률 기반 등급.
-//  주의: accuracyBpFrom 공식은 firestore.rules의 정수 검증식과 반드시 동일해야
-//  서버 검증(int(totalWon*10000/totalPlayed))과 클라이언트 계산이 어긋나지 않는다.
+// 레벨/정답률 유틸 — XP 기반 레벨(참여+칸수 난이도+승리 가중치) + 정답률 기반 등급.
+//  주의: 아래 공식들은 firestore.rules의 정수 검증식과 반드시 동일해야
+//  서버 검증과 클라이언트 계산이 어긋나지 않는다(둘 다 정수 연산만 사용).
+//
+//  게임 1판당 XP(참여만 해도 조금, 승리 시 칸수(난이도)에 비례해 더 많이):
+//   5칸: 패배 10 · 승리 30    6칸: 패배 15 · 승리 45    7칸: 패배 20 · 승리 60
+//
+//  레벨 임계값(삼각수 공식, 정수 곱셈만 사용 — 나눗셈/제곱근 불필요):
+//   레벨 N 도달에 필요한 누적 XP = 25 * N * (N-1)  (1→2:50, 2→3:100, 3→4:150 ...)
 // -----------------------------------------------------------------------------
 
-export const GAMES_PER_LEVEL = 10
 const MIN_GAMES_FOR_TIER = 5
 
-/** 참여판수 → 레벨(10판당 1레벨). */
-export function levelFromPlayed(totalPlayed) {
-  return Math.floor((totalPlayed || 0) / GAMES_PER_LEVEL) + 1
+/** 게임 1판의 XP 획득량. slots: 5|6|7, won: 승리 여부. */
+export function xpForGame({ slots, won }) {
+  const diff = (slots || 5) - 5 // 0, 1, 2
+  const participation = 10 + diff * 5
+  const winBonus = won ? 20 + diff * 10 : 0
+  return participation + winBonus
+}
+
+/** 레벨 N에 도달하기 위한 누적 XP 임계값. */
+export function xpThreshold(level) {
+  return 25 * level * (level - 1)
+}
+
+/** 누적 XP → 현재 레벨. */
+export function levelFromXp(xp) {
+  let level = 1
+  while (xpThreshold(level + 1) <= xp) level++
+  return level
+}
+
+/** 레벨 진행률(현재 레벨 구간 내 XP 진행 상황). */
+export function xpProgress(xp) {
+  const level = levelFromXp(xp || 0)
+  const cur = xpThreshold(level)
+  const next = xpThreshold(level + 1)
+  const span = next - cur
+  return { level, cur, next, into: (xp || 0) - cur, span, ratio: span ? (xp - cur) / span : 0 }
 }
 
 /** 정답률을 만분율 정수로 반환(0~10000). */
