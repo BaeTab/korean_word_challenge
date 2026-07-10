@@ -43,6 +43,21 @@ function readSavedDaily(key) {
   }
 }
 
+/**
+ * 일시적 네트워크 문제로 서버 기록이 조용히 유실되는 것을 막기 위한 1회 재시도.
+ * (로컬 통계는 항상 즉시 성공하는 반면 서버 기록은 실패할 수 있어, 재시도 없이는
+ * "내 기록" 판수와 랭킹의 참여 판수가 소리없이 어긋날 수 있다.)
+ */
+async function withRetry(fn, retries = 1, delayMs = 1200) {
+  try {
+    return await fn()
+  } catch (e) {
+    if (retries <= 0) throw e
+    await new Promise((r) => setTimeout(r, delayMs))
+    return withRetry(fn, retries - 1, delayMs)
+  }
+}
+
 // 레벨 시스템 개편 공지 — 버전 문자열을 바꾸면 다시 한 번 노출된다.
 const NOTICE_KEY = 'notice-level-system-v1'
 
@@ -150,10 +165,10 @@ export default function App() {
       // 커스텀 방은 완전히 별도 흐름 — 친구가 고른 단어라 난이도 가정이 깨지므로
       // XP/포인트/업적/로컬 통계 어디에도 반영하지 않고 방 랭킹에만 기록한다.
       if (isRoom && roomId) {
-        submitRoomAttempt({ roomId, nickname, attempts, won }).catch((e) => {
+        withRetry(() => submitRoomAttempt({ roomId, nickname, attempts, won })).catch((e) => {
           if (e?.code !== 'permission-denied') {
             // eslint-disable-next-line no-console
-            console.error('[submitRoomAttempt] 실패:', e)
+            console.error('[submitRoomAttempt] 실패(재시도 포함):', e)
           }
         })
         const roomDelay = slots * 180 + 600
@@ -180,7 +195,7 @@ export default function App() {
         setRegState('idle')
       }
       const prevLevel = playerStats?.level ?? 1
-      recordParticipation({ nickname, won, slots })
+      withRetry(() => recordParticipation({ nickname, won, slots }))
         .then((next) => {
           setPlayerStats(next)
           const newBadges = checkAndUnlock({
@@ -197,7 +212,8 @@ export default function App() {
         })
         .catch((e) => {
           // eslint-disable-next-line no-console
-          console.error('[recordParticipation] 실패:', e)
+          console.error('[recordParticipation] 실패(재시도 포함):', e)
+          showToast('⚠️ 서버 기록 저장 실패 — 인터넷 연결을 확인해 주세요')
         })
       const delay = slots * 180 + 600
       const t = setTimeout(() => setResultOpen(true), delay)
