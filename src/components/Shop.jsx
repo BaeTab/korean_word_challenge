@@ -25,6 +25,7 @@ export default function Shop({ playerStats, onPurchase, onEquip }) {
     } catch (e) {
       if (e?.message === 'NOT_ENOUGH_POINTS') setError('포인트가 부족해요!')
       else if (e?.message === 'ALREADY_OWNED') setError('이미 보유한 아이템이에요.')
+      else if (e?.code === 'permission-denied') setError('동기화 문제가 있어요 — 새로고침 후 다시 시도해 주세요')
       else setError('구매에 실패했어요. 잠시 후 다시 시도해 주세요.')
     } finally {
       setBusyId(null)
@@ -36,8 +37,9 @@ export default function Shop({ playerStats, onPurchase, onEquip }) {
     setBusyId(`equip-${skinId}`)
     try {
       await onEquip(skinId)
-    } catch {
-      setError('장착에 실패했어요. 잠시 후 다시 시도해 주세요.')
+    } catch (e) {
+      if (e?.code === 'permission-denied') setError('동기화 문제가 있어요 — 새로고침 후 다시 시도해 주세요')
+      else setError('장착에 실패했어요. 잠시 후 다시 시도해 주세요.')
     } finally {
       setBusyId(null)
     }

@@ -10,6 +10,7 @@ import DailyBoard from './components/DailyBoard'
 import Modal from './components/Modal'
 import Mascot from './components/Mascot'
 import ConfettiBurst from './components/ConfettiBurst'
+import LevelUpOverlay from './components/LevelUpOverlay'
 import IntroScreen from './components/IntroScreen'
 import Stats from './components/Stats'
 import Profile from './components/Profile'
@@ -26,11 +27,17 @@ import { isValidGuess, preloadGuessDict } from './constants/words'
 import { stageLabel } from './utils/format'
 import { buildShareText, shareResult } from './utils/share'
 import { getDailyKey } from './utils/daily'
-import { loadStats, recordResult } from './utils/stats'
+import { loadStats, recordResult, recordWrongAnswer, recordJamoStats } from './utils/stats'
 import { checkAndUnlock, checkAndUnlockCheckin } from './utils/achievements'
 import { CHECKIN_XP_BONUS } from './utils/checkin'
 import { decomposeWord } from './utils/hangul'
 import { deobfuscate } from './utils/secret'
+import { skinKeyOf } from './constants/shop'
+import { getTheme, toggleTheme } from './utils/theme'
+import {
+  playSubmit, playReveal, playWin, playLose, playLevelUp, playCoin,
+  vibrate, isSoundOn, setSoundOn,
+} from './utils/sound'
 import styles from './styles/App.module.css'
 
 /** 오늘 저장된 데일리 결과 읽기 (없으면 null) */
@@ -58,8 +65,8 @@ async function withRetry(fn, retries = 1, delayMs = 1200) {
   }
 }
 
-// 레벨 시스템 개편 공지 — 버전 문자열을 바꾸면 다시 한 번 노출된다.
-const NOTICE_KEY = 'notice-level-system-v1'
+// 시즌 리셋 공지 — 버전 문자열을 바꾸면 다시 한 번 노출된다.
+const NOTICE_KEY = 'notice-season-2026-07'
 
 export default function App() {
   const game = useWordleGame()
@@ -88,7 +95,12 @@ export default function App() {
   const [regState, setRegState] = useState('idle') // idle|submitting|done|already|error
   const [stats, setStats] = useState(loadStats)
   const [playerStats, setPlayerStats] = useState(null) // { totalPlayed, totalWon, accuracyBp, level }
+  const [levelUpTo, setLevelUpTo] = useState(null) // 레벨업 오버레이로 보여줄 새 레벨(없으면 null)
+  const [pointsGain, setPointsGain] = useState(null) // 헤더 SHOP 위로 띄울 포인트 획득 증가분(없으면 null)
+  const [soundOn, setSoundOnState] = useState(isSoundOn) // 사운드/햅틱 토글(아이콘 표시용)
+  const [theme, setThemeState] = useState(getTheme) // 라이트/다크 토글(아이콘 표시용)
   const prevStatus = useRef('playing')
+  const prevAttempts = useRef(0) // 리빌 사운드용: 직전 제출 행 수
   const toastTimer = useRef(null)
   const regParams = useRef(null) // 자동 등록에 쓸 이번 판 성적
 
@@ -97,14 +109,16 @@ export default function App() {
     preloadGuessDict()
   }, [])
 
-  // 레벨 시스템 개편 공지 — 접속 시 한 번만 노출
+  // 시즌 리셋 공지 — 접속 시 한 번만 노출. 키 저장은 "닫을 때" 해서
+  // 읽기 전에 이탈해도 다음 접속에 다시 보여주고, StrictMode 이중 마운트에도 안전.
   useEffect(() => {
     try {
-      if (!localStorage.getItem(NOTICE_KEY)) {
-        setNoticeOpen(true)
-        localStorage.setItem(NOTICE_KEY, '1')
-      }
+      if (!localStorage.getItem(NOTICE_KEY)) setNoticeOpen(true)
     } catch { /* noop */ }
+  }, [])
+  const closeNotice = useCallback(() => {
+    try { localStorage.setItem(NOTICE_KEY, '1') } catch { /* noop */ }
+    setNoticeOpen(false)
   }, [])
 
   // ?room=코드 링크로 들어왔으면 방 정보를 조회해 참가 화면을 준비한다.
@@ -130,6 +144,41 @@ export default function App() {
     clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(''), 1500)
   }, [])
+
+  // 포인트 획득 플로팅(+N 🪙)은 애니메이션 길이(1.1s) 뒤 자동으로 걷어낸다.
+  useEffect(() => {
+    if (pointsGain == null) return undefined
+    const t = setTimeout(() => setPointsGain(null), 1100)
+    return () => clearTimeout(t)
+  }, [pointsGain])
+
+  // 사운드/햅틱 토글 — 저장 + 아이콘 상태 갱신(켤 때는 틱으로 오디오 컨텍스트를 깨운다).
+  const toggleSound = useCallback(() => {
+    const next = !isSoundOn()
+    setSoundOn(next)
+    setSoundOnState(next)
+    if (next) vibrate(8)
+  }, [])
+
+  // 라이트/다크 테마 토글 — <html data-theme> 갱신 + 아이콘 상태 반영.
+  const toggleThemeBtn = useCallback(() => {
+    setThemeState(toggleTheme())
+  }, [])
+
+  // 행 리빌 사운드 — 제출 행 수가 늘어난 순간, 마지막 타일 판정색으로 대표 톤을 1회
+  //  (플립 중반 색이 드러나는 타이밍에 맞춰 살짝 지연; 타일마다 울리면 시끄럽다).
+  useEffect(() => {
+    const prev = prevAttempts.current
+    prevAttempts.current = attempts
+    if (attempts > prev && attempts > 0) {
+      const row = evaluations[attempts - 1]
+      if (row && row.length) {
+        const last = row[row.length - 1]
+        setTimeout(() => playReveal(last), Math.max(0, slots - 1) * 120 + 200)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempts])
 
   // 데일리 랭킹 자동 등록 (regParams.current 기준). 실패 시 재시도 버튼에서도 호출.
   const autoRegister = useCallback(async () => {
@@ -172,13 +221,20 @@ export default function App() {
           }
         })
         const roomDelay = slots * 180 + 600
-        const roomTimer = setTimeout(() => setResultOpen(true), roomDelay)
+        // 승/패 SFX는 플립이 끝나 결과 모달이 열리는 시점에 맞춰 재생.
+        const roomTimer = setTimeout(() => {
+          setResultOpen(true)
+          if (won) { playWin(); vibrate([30, 50, 30]) } else { playLose() }
+        }, roomDelay)
         prevStatus.current = status
         return () => clearTimeout(roomTimer)
       }
 
       const nextLocalStats = recordResult({ won, attempts, slots })
       setStats(nextLocalStats)
+      // 자모 통계는 승패 무관 누적, 오답노트는 패배 시만(커스텀 방은 위에서 이미 return).
+      recordJamoStats(grid.slice(0, attempts))
+      if (!won) recordWrongAnswer({ word: answer, slots })
       if (isDaily && dailyKey) {
         try {
           localStorage.setItem(
@@ -195,9 +251,15 @@ export default function App() {
         setRegState('idle')
       }
       const prevLevel = playerStats?.level ?? 1
+      const prevPoints = playerStats?.points ?? 0
       withRetry(() => recordParticipation({ nickname, won, slots }))
         .then((next) => {
           setPlayerStats(next)
+          // 레벨업: 토스트 대신 전용 오버레이 연출로 승격
+          if (next.level > prevLevel) { setLevelUpTo(next.level); playLevelUp() }
+          // 포인트 획득: 헤더 SHOP 스탯박스 위로 +N 🪙 플로팅
+          const gained = (next.points ?? 0) - prevPoints
+          if (gained > 0) setPointsGain(gained)
           const newBadges = checkAndUnlock({
             won, slots,
             streak: nextLocalStats.streak,
@@ -205,10 +267,8 @@ export default function App() {
             level: next.level,
             accuracyBp: next.accuracyBp,
           })
-          const messages = []
-          if (next.level > prevLevel) messages.push(`🎉 레벨업! Lv.${next.level}`)
-          if (newBadges.length > 0) messages.push(`🏅 ${newBadges.map((b) => b.name).join(', ')}`)
-          if (messages.length > 0) showToast(messages.join(' · '))
+          // 새 업적만 토스트로 안내(레벨업 문구는 오버레이로 이동)
+          if (newBadges.length > 0) showToast(`🏅 ${newBadges.map((b) => b.name).join(', ')}`)
         })
         .catch((e) => {
           // eslint-disable-next-line no-console
@@ -216,7 +276,11 @@ export default function App() {
           showToast('⚠️ 서버 기록 저장 실패 — 인터넷 연결을 확인해 주세요')
         })
       const delay = slots * 180 + 600
-      const t = setTimeout(() => setResultOpen(true), delay)
+      // 승/패 SFX는 플립이 끝나 결과 모달이 열리는 시점에 맞춰 재생.
+      const t = setTimeout(() => {
+        setResultOpen(true)
+        if (won) { playWin(); vibrate([30, 50, 30]) } else { playLose() }
+      }, delay)
       prevStatus.current = status
       return () => clearTimeout(t)
     }
@@ -242,6 +306,7 @@ export default function App() {
       setTimeout(() => clearCurrent(), 320) // 흔들림 후 해당 행 비우기
       return
     }
+    playSubmit()
     pressEnter()
   }, [status, currentLength, slots, attempts, current, pressEnter, clearCurrent, showToast])
 
@@ -312,6 +377,7 @@ export default function App() {
     try {
       const next = await checkIn({ nickname })
       setPlayerStats(next)
+      playCoin()
       const newBadges = checkAndUnlockCheckin({ checkinStreak: next.checkinStreak })
       const messages = [`📅 출석 체크 완료! +${CHECKIN_XP_BONUS} XP (🔥${next.checkinStreak}일)`]
       if (newBadges.length > 0) messages.push(`🏅 ${newBadges.map((b) => b.name).join(', ')}`)
@@ -333,6 +399,7 @@ export default function App() {
   const handlePurchase = useCallback(async (itemId) => {
     const next = await purchaseItem({ nickname, itemId })
     setPlayerStats(next)
+    playCoin()
     showToast('구매 완료! 🛒')
   }, [nickname, showToast])
 
@@ -342,11 +409,18 @@ export default function App() {
     setPlayerStats(next)
   }, [nickname])
 
+  // 상점 열기 — 열기 직전 서버 프로필을 1회 재조회해 stale 잔액/보유 목록을 방지(실패는 무시).
+  const openShop = useCallback(() => {
+    getPlayerStats(nickname).then(setPlayerStats).catch(() => {})
+    setShopOpen(true)
+  }, [nickname])
+
   const isWon = status === 'won'
   const isLost = status === 'lost'
   const mascotMood = isWon ? 'happy' : isLost ? 'sad' : 'idle'
   const winRow = isWon ? attempts - 1 : -1
-  const mySkin = playerStats?.equippedSkin || 'default'
+  // equippedSkin에는 아이템 ID('skin-cat')가 저장되므로 Mascot용 skin 키('cat')로 변환.
+  const mySkin = skinKeyOf(playerStats?.equippedSkin)
 
   // 인트로: 닉네임 입력 후 시작. 데일리 이미 참여했으면 랭킹 열람만.
   if (!started) {
@@ -424,22 +498,22 @@ export default function App() {
         <Modal
           open={noticeOpen}
           title="notice"
-          onClose={() => setNoticeOpen(false)}
+          onClose={closeNotice}
         >
           <div className={styles.result}>
             <Mascot mood="happy" size={72} />
-            <h2 className={styles.resultTitle}>랭킹이 레벨 시스템으로 바뀌었어요 🆙</h2>
+            <h2 className={styles.resultTitle}>새 시즌이 시작됐어요! 🚀</h2>
             <p className={styles.resultDesc}>
-              이제 <b className={styles.answerWord}>시간 제한이 없어요</b> — 편하게 풀어보세요.
+              모든 <b className={styles.answerWord}>기록과 랭킹이 초기화</b>됐어요 — 다 함께 0판부터 새출발!
               <br />
-              <b className={styles.answerWord}>참여할수록 레벨업</b>, <b className={styles.answerWord}>정답률</b>로
-              등급이 매겨지는 영구 랭킹으로 바뀌었고, 기존 주간 랭킹은 초기화됐어요.
+              포인트로 꾸미는 <b className={styles.answerWord}>상점·인벤토리</b>가 열렸어요 —
+              마스코트 <b className={styles.answerWord}>스킨 6종</b>을 모으고 장착해 보세요.
               <br />
-              새로운 <b className={styles.answerWord}>7칸 마스터 모드</b>도 추가됐어요!
+              매일 <b className={styles.answerWord}>출석 체크</b>로 XP 보너스도 챙길 수 있어요!
             </p>
             <button
               className={styles.btn}
-              onClick={() => setNoticeOpen(false)}
+              onClick={closeNotice}
               style={{ marginTop: 10 }}
             >
               확인했어요
@@ -499,14 +573,38 @@ export default function App() {
             <span className={styles.statValue}>Lv.{playerStats?.level ?? 1}</span>
             <XpBar xp={playerStats?.xp ?? 0} compact />
           </button>
+          <div className={styles.shopStat}>
+            <button
+              type="button"
+              className={`${styles.statBox} ${styles.statBoxBtn}`}
+              onClick={openShop}
+              title="상점 열기"
+            >
+              <span className={styles.statLabel}>SHOP</span>
+              <span className={styles.statValue}>🪙 {playerStats?.points ?? 0}</span>
+            </button>
+            {pointsGain != null && (
+              <span className={styles.pointsFloat} aria-hidden="true">+{pointsGain} 🪙</span>
+            )}
+          </div>
           <button
             type="button"
-            className={`${styles.statBox} ${styles.statBoxBtn}`}
-            onClick={() => setShopOpen(true)}
-            title="상점 열기"
+            className={styles.soundToggle}
+            onClick={toggleSound}
+            title={soundOn ? '사운드 끄기' : '사운드 켜기'}
+            aria-label={soundOn ? '사운드 끄기' : '사운드 켜기'}
+            aria-pressed={soundOn}
           >
-            <span className={styles.statLabel}>SHOP</span>
-            <span className={styles.statValue}>🪙 {playerStats?.points ?? 0}</span>
+            {soundOn ? '🔊' : '🔇'}
+          </button>
+          <button
+            type="button"
+            className={styles.soundToggle}
+            onClick={toggleThemeBtn}
+            title={theme === 'light' ? '다크 모드로 전환' : '라이트 모드로 전환'}
+            aria-label={theme === 'light' ? '다크 모드로 전환' : '라이트 모드로 전환'}
+          >
+            {theme === 'light' ? '☀️' : '🌙'}
           </button>
         </div>
       </header>
@@ -517,7 +615,7 @@ export default function App() {
           <div className={styles.toastSlot}>
             {toast && <div className={styles.toast} role="status">{toast}</div>}
           </div>
-          <Board grid={grid} slots={slots} shakeRow={shakeRow} winRow={winRow} lost={isLost} />
+          <Board grid={grid} slots={slots} attempts={attempts} shakeRow={shakeRow} winRow={winRow} lost={isLost} />
 
           <div className={styles.tools}>
             <button
@@ -642,7 +740,7 @@ export default function App() {
           localStats={stats}
           onSuggestWord={() => setSuggestOpen(true)}
           onCheckIn={handleCheckIn}
-          onOpenShop={() => setShopOpen(true)}
+          onOpenShop={openShop}
         />
       </Modal>
 
@@ -663,6 +761,11 @@ export default function App() {
       >
         <Shop playerStats={playerStats} onPurchase={handlePurchase} onEquip={handleEquip} />
       </Modal>
+
+      {/* ===== 레벨업 오버레이 (토스트 대신 전용 연출) ===== */}
+      {levelUpTo != null && (
+        <LevelUpOverlay level={levelUpTo} skin={mySkin} onClose={() => setLevelUpTo(null)} />
+      )}
     </div>
   )
 }

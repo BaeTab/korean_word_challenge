@@ -6,9 +6,23 @@ import XpBar from './XpBar'
 import { levelTitle, accuracyTier, xpProgress } from '../utils/level'
 import { ACHIEVEMENTS, loadAchievements } from '../utils/achievements'
 import { hasCheckedInToday } from '../utils/checkin'
+import { loadWrongNotes, loadJamoStats } from '../utils/stats'
+import { decomposeWord } from '../utils/hangul'
 import styles from '../styles/Profile.module.css'
 
 const MODE_LABELS = { 5: '5칸·기본', 6: '6칸·챌린지', 7: '7칸·마스터' }
+
+/** 자모 통계에서 시도 5회 이상 자모의 오답률 (p+a)/(c+p+a) 상위 n개. */
+function topConfusedJamo(stat, n) {
+  return Object.entries(stat)
+    .map(([jamo, s]) => {
+      const total = (s.c || 0) + (s.p || 0) + (s.a || 0)
+      return { jamo, total, wrongRate: total ? ((s.p || 0) + (s.a || 0)) / total : 0 }
+    })
+    .filter((x) => x.total >= 5)
+    .sort((a, b) => b.wrongRate - a.wrongRate)
+    .slice(0, n)
+}
 
 export default function Profile({ nickname, playerStats, localStats, onSuggestWord, onCheckIn, onOpenShop }) {
   const level = playerStats?.level ?? 1
@@ -24,6 +38,8 @@ export default function Profile({ nickname, playerStats, localStats, onSuggestWo
   const tier = accuracyTier(totalPlayed, accuracyBp)
   const { unlocked } = loadAchievements()
   const unlockedCount = ACHIEVEMENTS.filter((a) => unlocked[a.id]).length
+  const wrongNotes = loadWrongNotes().slice(0, 8) // 목록이 길어지지 않게 최근 8개만
+  const jamoTop = topConfusedJamo(loadJamoStats(), 5)
 
   const handleCheckIn = async () => {
     if (checkinBusy || checkedInToday || !onCheckIn) return
@@ -118,6 +134,38 @@ export default function Profile({ nickname, playerStats, localStats, onSuggestWo
             )
           })}
         </div>
+      </div>
+
+      <div className={styles.section}>
+        <p className={styles.sectionTitle}>📕 오답노트</p>
+        {wrongNotes.length === 0 ? (
+          <p className={styles.emptyNote}>아직 없어요 — 다행이네요!</p>
+        ) : (
+          <ul className={styles.wrongList}>
+            {wrongNotes.map((w, i) => (
+              <li key={`${w.word}-${w.dateKey}-${i}`} className={styles.wrongItem}>
+                <span className={styles.wrongWord}>{w.word}</span>
+                <span className={styles.wrongJamo}>{decomposeWord(w.word).join(' ')}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className={styles.section}>
+        <p className={styles.sectionTitle}>🔍 헷갈린 자모 TOP 5</p>
+        {jamoTop.length === 0 ? (
+          <p className={styles.emptyNote}>5판 이상 플레이하면 분석해드려요</p>
+        ) : (
+          <ul className={styles.jamoList}>
+            {jamoTop.map((j) => (
+              <li key={j.jamo} className={styles.jamoItem}>
+                <span className={styles.jamoChar}>{j.jamo}</span>
+                <span className={styles.jamoRate}>오답률 {Math.round(j.wrongRate * 100)}%</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {onSuggestWord && (

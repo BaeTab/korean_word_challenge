@@ -90,6 +90,51 @@
 }
 .statBoxBtn:hover { transform: translateY(-2px); border-color: var(--green); }
 
+/* 사운드/햅틱 토글(원형) */
+.soundToggle {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: transform 0.15s var(--ease-bounce), border-color 0.2s, filter 0.2s;
+}
+.soundToggle:hover { transform: translateY(-2px); border-color: var(--green); filter: brightness(1.1); }
+.soundToggle:active { transform: scale(0.9); }
+
+/* SHOP 스탯박스 래퍼 — 위로 떠오르는 포인트 획득(+N 🪙) 앵커 */
+.shopStat { position: relative; display: flex; }
+.pointsFloat {
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 30;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: var(--amber);
+  text-shadow: 0 0 12px rgba(255, 180, 84, 0.6);
+  white-space: nowrap;
+  animation: pointsFloat 1.1s ease-out forwards;
+}
+@keyframes pointsFloat {
+  0% { opacity: 0; transform: translate(-50%, 4px) scale(0.8); }
+  20% { opacity: 1; transform: translate(-50%, -6px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -32px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pointsFloat { animation: none; opacity: 0; }
+}
+
 /* ---- 본문: 게임 단일 컬럼 (랭킹은 인트로/결과에서만) ---- */
 .main {
   display: flex;
@@ -320,7 +365,7 @@
 }
 .btnShare {
   background: linear-gradient(135deg, var(--blue), #4f7fd6);
-  color: #06121f;
+  color: var(--on-blue);
   box-shadow: 0 8px 22px -8px rgba(111, 177, 255, 0.7);
 }
 .btnGhost {
@@ -371,6 +416,9 @@
   .rankCol { position: static; }
   .stats { width: 100%; justify-content: space-between; }
   .statBox { flex: 1; min-width: 0; }
+  /* SHOP 래퍼도 다른 스탯박스와 같은 비율로 늘어나고, 내부 버튼이 래퍼를 꽉 채우게 */
+  .shopStat { flex: 1; min-width: 0; }
+  .shopStat .statBox { width: 100%; }
 }
 @media (max-width: 480px) {
   .logo { font-size: 1.25rem; }

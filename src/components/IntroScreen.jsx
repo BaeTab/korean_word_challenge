@@ -10,6 +10,9 @@ import Stats from './Stats'
 import InstallBanner from './InstallBanner'
 import { getDailyKey } from '../utils/daily'
 import { winRate } from '../utils/stats'
+import { isSoundOn, setSoundOn, vibrate } from '../utils/sound'
+import { getTheme, toggleTheme } from '../utils/theme'
+import { WORD_LIST_7 } from '../constants/words'
 import styles from '../styles/Intro.module.css'
 
 const SLOT_OPTIONS = [
@@ -23,6 +26,16 @@ export default function IntroScreen({ onStart, onViewDaily, onCreateRoom, stats,
   const [error, setError] = useState('')
   const [showStats, setShowStats] = useState(false)
   const [slots, setSlots] = useState(5)
+  const [soundOn, setSoundOnState] = useState(isSoundOn())
+  const [theme, setThemeState] = useState(getTheme)
+
+  const toggleSound = () => {
+    const next = !isSoundOn()
+    setSoundOn(next)
+    setSoundOnState(next)
+    if (next) vibrate(8)
+  }
+  const toggleThemeBtn = () => setThemeState(toggleTheme())
 
   const dailyKey = getDailyKey()
   const dailyDoneHere =
@@ -71,6 +84,25 @@ export default function IntroScreen({ onStart, onViewDaily, onCreateRoom, stats,
               <i style={{ background: '#3ddc97' }} />
             </span>
             <span className={styles.titleText}>~/jamo-wordle · start</span>
+            <button
+              type="button"
+              className={styles.soundToggle}
+              onClick={toggleSound}
+              title={soundOn ? '사운드 끄기' : '사운드 켜기'}
+              aria-label={soundOn ? '사운드 끄기' : '사운드 켜기'}
+              aria-pressed={soundOn}
+            >
+              {soundOn ? '🔊' : '🔇'}
+            </button>
+            <button
+              type="button"
+              className={styles.soundToggle}
+              onClick={toggleThemeBtn}
+              title={theme === 'light' ? '다크 모드로 전환' : '라이트 모드로 전환'}
+              aria-label={theme === 'light' ? '다크 모드로 전환' : '라이트 모드로 전환'}
+            >
+              {theme === 'light' ? '☀️' : '🌙'}
+            </button>
           </div>
 
           <div className={styles.body}>
@@ -126,7 +158,7 @@ export default function IntroScreen({ onStart, onViewDaily, onCreateRoom, stats,
                 {dailyDoneHere
                   ? '오늘의 챌린지는 이미 참여 완료 — 랭킹만 볼 수 있어요 🌙'
                   : <>오늘의 챌린지는 <b>모두 같은 단어(5칸)</b> · <b>닉네임당 하루 1회</b></>}
-                {slots === 7 && <><br />7칸 모드는 큐레이션된 <b>42개 후보 단어</b> 기반이에요</>}
+                {slots === 7 && <><br />7칸 모드는 큐레이션된 <b>{WORD_LIST_7.length}개 후보 단어</b> 기반이에요</>}
               </p>
 
               {onCreateRoom && (

@@ -53,15 +53,22 @@
   100% { transform: scale(1); }
 }
 
-/* 판정색 (커스텀 프로퍼티만 세팅 → flip이 실제 반영) */
+/* 판정색 (커스텀 프로퍼티 → 정적 반영 + flip 키프레임에서 재사용) */
 .correct { --tile-bg: var(--correct); --tile-fg: var(--correct-ink); --tile-bd: var(--correct); }
 .present { --tile-bg: var(--present); --tile-fg: var(--present-ink); --tile-bd: var(--present); }
 .absent  { --tile-bg: var(--absent);  --tile-fg: var(--absent-ink);  --tile-bd: var(--absent); }
 
-/* 제출된 칸: 순차 뒤집기 공개 (칸 인덱스 --i 만큼 지연) */
+/* 판정된 칸: 판정색을 정적으로 반영 (플립이 없는 이전 행도 색이 유지되게) */
 .revealed {
-  animation: flip 0.55s ease both;
-  animation-delay: calc(var(--i) * 0.16s);
+  background: var(--tile-bg);
+  border-color: var(--tile-bd);
+  color: var(--tile-fg);
+}
+
+/* 방금 제출된 행: 칸별로 왼→오 순차 X축 플립. 색은 플립 중반(rotateX 90°)에 드러난다. */
+.flipRow .tile {
+  animation: flip 0.45s ease both;
+  animation-delay: calc(var(--i) * 0.12s);
 }
 @keyframes flip {
   0% {
@@ -91,11 +98,11 @@
   }
 }
 
-/* 정답 행: 공개 후 통통 튀는 승리 댄스 */
-.win .tile {
+/* 정답 행: 플립이 끝난 뒤 통통 튀는 승리 댄스 */
+.flipRow.win .tile {
   animation:
-    flip 0.5s ease both calc(var(--i) * 0.14s),
-    dance 0.55s var(--ease-bounce) calc(0.95s + var(--i) * 0.09s);
+    flip 0.45s ease both calc(var(--i) * 0.12s),
+    dance 0.55s var(--ease-bounce) calc(0.55s + var(--i) * 0.12s);
 }
 @keyframes dance {
   0%, 100% { transform: translateY(0) rotate(0); }
@@ -130,8 +137,7 @@
   .tile { border-radius: 11px; }
 }
 
-/* 모션 최소화 선호 시 애니메이션 축소 */
+/* 모션 최소화 선호 시 플립/바운스 생략 — .revealed의 정적 판정색으로 즉시 표시된다. */
 @media (prefers-reduced-motion: reduce) {
-  .revealed, .win .tile, .shake, .lost, .pop { animation: none !important; }
-  .revealed { background: var(--tile-bg); border-color: var(--tile-bd); color: var(--tile-fg); }
+  .flipRow .tile, .flipRow.win .tile, .shake, .lost, .pop { animation: none !important; }
 }

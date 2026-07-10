@@ -50,7 +50,8 @@
   align-items: center;
   justify-content: center;
   transition:
-    transform 0.1s var(--ease-bounce),
+    transform 0.08s var(--ease-bounce),
+    filter 0.08s,
     background 0.15s,
     border-color 0.15s,
     box-shadow 0.15s;
@@ -60,17 +61,19 @@
   border-color: var(--green);
   transform: translateY(-2px);
 }
+/* 프레스 피드백: 살짝 눌리며(scale 0.9) 밝기 상승 */
 .key:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: scale(0.9);
+  filter: brightness(1.25);
   box-shadow: 0 0 0 rgba(0, 0, 0, 0);
 }
 .key:disabled { opacity: 0.55; cursor: default; }
 
 /* 자음/모음 은은한 색 구분 (판정색이 오면 덮어씀) */
-.cons { border-color: #2b3a4d; }
+.cons { border-color: var(--key-cons-bd); }
 .vow {
-  border-color: #3a3320;
-  background: linear-gradient(180deg, var(--panel-2), #1e2130);
+  border-color: var(--key-vow-bd);
+  background: linear-gradient(180deg, var(--panel-2), var(--key-vow-bg));
 }
 
 /* 판정 반영 */

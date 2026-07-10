@@ -1,6 +1,8 @@
 // -----------------------------------------------------------------------------
-// 개인 통계 (localStorage) — 플레이/승률/연속(스트릭)/시도 분포
+// 개인 통계 (localStorage) — 플레이/승률/연속(스트릭)/시도 분포 + 오답노트/자모 통계
 // -----------------------------------------------------------------------------
+import { getDailyKey } from './daily'
+
 const KEY = 'jamo-wordle-stats-v1'
 
 const emptyStats = () => ({
@@ -68,4 +70,71 @@ export function resetStats() {
 
 export function winRate(s) {
   return s.played ? Math.round((s.wins / s.played) * 100) : 0
+}
+
+// ---- 오답노트 (localStorage) -------------------------------------------------
+const WRONG_KEY = 'jamo-wordle-wrongnote-v1'
+const WRONG_MAX = 20
+
+/** 오답노트 읽기 — 최신순 [{word, slots, dateKey}] (최대 20개). */
+export function loadWrongNotes() {
+  try {
+    const v = JSON.parse(localStorage.getItem(WRONG_KEY) || '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * 패배한 단어를 오답노트에 기록(최신순, 최대 20개 유지).
+ * @param {{word:string, slots:number}} r
+ */
+export function recordWrongAnswer({ word, slots }) {
+  if (!word) return loadWrongNotes()
+  const next = [{ word, slots, dateKey: getDailyKey() }, ...loadWrongNotes()].slice(0, WRONG_MAX)
+  try {
+    localStorage.setItem(WRONG_KEY, JSON.stringify(next))
+  } catch {
+    /* 저장 실패해도 게임엔 영향 없음 */
+  }
+  return next
+}
+
+// ---- 자모 통계 (localStorage) ------------------------------------------------
+const JAMO_KEY = 'jamo-wordle-jamostat-v1'
+
+/** 자모 통계 읽기 — { [jamo]: {c, p, a} } (correct/present/absent 누적). */
+export function loadJamoStats() {
+  try {
+    const v = JSON.parse(localStorage.getItem(JAMO_KEY) || '{}')
+    return v && typeof v === 'object' ? v : {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * 제출된 행들의 셀 판정을 자모별로 누적한다.
+ * @param {Array<Array<{jamo:string, state:string}>>|Array<{jamo:string, state:string}>} rows
+ *   grid의 제출 행 배열(또는 셀 배열). state가 correct/present/absent인 셀만 집계.
+ */
+export function recordJamoStats(rows) {
+  if (!rows || !rows.length) return loadJamoStats()
+  // 행 배열이면 셀로 평탄화(이미 셀 배열이면 그대로 사용).
+  const cells = Array.isArray(rows[0]) ? rows.flat() : rows
+  const stat = loadJamoStats()
+  const field = { correct: 'c', present: 'p', absent: 'a' }
+  for (const cell of cells) {
+    const key = cell && field[cell.state]
+    if (!key || !cell.jamo) continue
+    const rec = stat[cell.jamo] || (stat[cell.jamo] = { c: 0, p: 0, a: 0 })
+    rec[key] += 1
+  }
+  try {
+    localStorage.setItem(JAMO_KEY, JSON.stringify(stat))
+  } catch {
+    /* noop */
+  }
+  return stat
 }

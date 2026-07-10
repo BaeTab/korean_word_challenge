@@ -35,6 +35,24 @@
 .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
 .titleText { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim); }
 
+/* 사운드/햅틱 토글 — 타이틀바 우측 끝 원형 버튼 */
+.soundToggle {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: transform 0.15s var(--ease-bounce), border-color 0.2s, filter 0.2s;
+}
+.soundToggle:hover { border-color: var(--green); filter: brightness(1.1); }
+.soundToggle:active { transform: scale(0.9); }
+
 .body {
   padding: 26px 26px 30px;
   display: flex;

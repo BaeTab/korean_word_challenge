@@ -5,6 +5,7 @@
 //  - 물리 키보드(두벌식 e.code, Enter, Backspace) 지원
 // -----------------------------------------------------------------------------
 import { useEffect } from 'react'
+import { playKey, vibrate } from '../utils/sound'
 import styles from '../styles/Keyboard.module.css'
 
 // 두벌식 배치: 각 줄을 [자음 그룹] | [모음 그룹] 으로 나눈다.
@@ -31,6 +32,15 @@ const STATE_CLASS = {
 }
 
 export default function Keyboard({ keyStates, onKey, onDelete, onEnter, disabled }) {
+  // 키 프레스 피드백(틱 사운드 + 짧은 진동)을 입력/삭제/엔터 공통으로 얹어 실제 액션을 호출.
+  const pressFeedback = () => {
+    playKey()
+    vibrate(8)
+  }
+  const handleKey = (jamo) => { pressFeedback(); onKey(jamo) }
+  const handleDelete = () => { pressFeedback(); onDelete() }
+  const handleEnter = () => { pressFeedback(); onEnter() }
+
   // 물리 키보드 지원
   useEffect(() => {
     const handler = (e) => {
@@ -41,23 +51,24 @@ export default function Keyboard({ keyStates, onKey, onDelete, onEnter, disabled
       if (e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key === 'Enter') {
         e.preventDefault()
-        if (!e.repeat && !disabled) onEnter()
+        if (!e.repeat && !disabled) handleEnter()
         return
       }
       if (e.key === 'Backspace') {
         e.preventDefault() // 브라우저 '뒤로가기' 방지
-        if (!disabled) onDelete()
+        if (!disabled) handleDelete()
         return
       }
       if (e.repeat) return
       const jamo = CODE_TO_JAMO[e.code]
       if (jamo && !disabled) {
         e.preventDefault()
-        onKey(jamo)
+        handleKey(jamo)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onKey, onDelete, onEnter, disabled])
 
   const renderKey = (jamo, kind) => (
@@ -65,7 +76,7 @@ export default function Keyboard({ keyStates, onKey, onDelete, onEnter, disabled
       key={jamo}
       type="button"
       className={`${styles.key} ${styles[kind]} ${STATE_CLASS[keyStates[jamo]] || ''}`}
-      onClick={() => onKey(jamo)}
+      onClick={() => handleKey(jamo)}
       disabled={disabled}
     >
       {jamo}
@@ -81,7 +92,7 @@ export default function Keyboard({ keyStates, onKey, onDelete, onEnter, disabled
             <button
               type="button"
               className={`${styles.key} ${styles.fn} ${styles.del}`}
-              onClick={onDelete}
+              onClick={handleDelete}
               disabled={disabled}
               aria-label="지움(백스페이스)"
             >
@@ -107,7 +118,7 @@ export default function Keyboard({ keyStates, onKey, onDelete, onEnter, disabled
             <button
               type="button"
               className={`${styles.key} ${styles.fn} ${styles.enter}`}
-              onClick={onEnter}
+              onClick={handleEnter}
               disabled={disabled}
               aria-label="입력(엔터)"
             >

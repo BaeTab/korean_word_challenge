@@ -32,6 +32,12 @@
   --absent: #323b49;
   --absent-ink: #79879a;
 
+  /* 하드코딩 색 승격분 — 라이트에서 깨지는 값을 변수화(두 테마 모두 정의) */
+  --on-blue: #06121f;      /* 파란 버튼(공유하기) 글자 */
+  --key-cons-bd: #2b3a4d;  /* 자음 키 테두리(쿨톤) */
+  --key-vow-bd: #3a3320;   /* 모음 키 테두리(웜톤) */
+  --key-vow-bg: #1e2130;   /* 모음 키 그라데이션 하단 */
+
   /* 형태 */
   --radius: 16px;
   --radius-sm: 11px;
@@ -40,6 +46,45 @@
   --font-kr: 'Gothic A1', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
 
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* =============================================================================
+   라이트 테마 — <html data-theme='light'>일 때 팔레트만 재정의.
+   (컴포넌트 CSS는 변수만 참조하므로 이 블록으로 전면 대응)
+   ============================================================================= */
+:root[data-theme='light'] {
+  /* 배경 */
+  --bg: #f2f5f9;
+  --bg-soft: #e9edf3;
+  --panel: #ffffff;
+  --panel-2: #f0f3f8;
+  --border: #d3dbe5;
+  --border-soft: #e2e7ee;
+
+  /* 텍스트 */
+  --text: #1b2733;
+  --text-dim: #5a6a7d;
+
+  /* 포인트 — 라이트 배경 대비를 위해 채도/명도를 낮춘 값 */
+  --green: #0c9e6b;
+  --green-soft: #0a8a5d;
+  --amber: #d97706;
+  --pink: #d6336c;
+  --blue: #2563eb;
+
+  /* 판정색 — 라이트에서 타일 글자가 뚜렷하도록 잉크 대비 확보 */
+  --correct: #0fa870;
+  --correct-ink: #ffffff;
+  --present: #e8a512;
+  --present-ink: #3a2a00;
+  --absent: #c3cdd9;
+  --absent-ink: #5f6f80;
+
+  /* 하드코딩 색 승격분 — 라이트 대비 보정 */
+  --on-blue: #ffffff;      /* 어두운 파랑 위 흰 글자 */
+  --key-cons-bd: #cbd6e3;
+  --key-vow-bd: #e6dcc4;
+  --key-vow-bg: #eaeff6;
 }
 
 * {
